@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AKS 워크숍 데모 애플리케이션</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AKS 워크숍 데모 애플리케이션</h1>
+            <p>Private AKS + AGIC + GitHub Actions</p>
+        </header>
+        
+        <main>
+            <section class="info-box">
+                <h2>애플리케이션 정보</h2>
+                <ul>
+                    <li><strong>배포 시간:</strong> <span id="deploy-time"></span></li>
+                    <li><strong>호스트명:</strong> <span id="hostname"></span></li>
+                    <li><strong>클라이언트 IP:</strong> <span id="client-ip"></span></li>
+                </ul>
+            </section>
+            
+            <section class="architecture">
+                <h2>아키텍처 구성</h2>
+                <ul>
+                    <li>Private AKS Cluster</li>
+                    <li>Private ACR</li>
+                    <li>Application Gateway (AGIC)</li>
+                    <li>Azure Virtual Network</li>
+                    <li>Private DNS Zone</li>
+                    <li>Azure Key Vault</li>
+                    <li>GitHub Actions</li>
+                </ul>
+            </section>
+        </main>
+        
+        <footer>
+            <p>© 2023 AKS 워크숍 - Terraform으로 구축된 인프라</p>
+        </footer>
+    </div>
+
+    <script>
+        // 현재 시간 표시
+        document.getElementById('deploy-time').textContent = new Date().toLocaleString('ko-KR');
+        
+        // 호스트명 표시 (실제로는 서버에서 제공해야 함)
+        document.getElementById('hostname').textContent = window.location.hostname;
+        
+        // 클라이언트 IP 표시 (실제로는 서버에서 제공해야 함)
+        document.getElementById('client-ip').textContent = "클라이언트 IP 정보";
+    </script>
+</body>
+</html> 

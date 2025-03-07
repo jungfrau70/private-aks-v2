@@ -1,0 +1,167 @@
+az login --tenant jupyteronlinegmail.onmicrosoft.com
+
+```bash
+
+SUBSCRIPTION_ID=$(az account show --query id --output tsv)
+az account set --subscription $SUBSCRIPTION_ID
+LOCATION="koreacentral"
+
+echo "SUBSCRIPTION_ID: $SUBSCRIPTION_ID" 
+echo "LOCATION: $LOCATION"
+
+# Hub VNet
+HUB_VNET_NAME=Hub_VNET
+FW_SUBNET_NAME=AzureFirewallSubnet
+BASTION_SUBNET_NAME=AzureBastionSubnet
+HUB_VNET_PREFIX=10.0.0.0/22 # IP address range of the Virtual network (VNet).
+BASTION_SUBNET_PREFIX=10.0.0.128/26 # IP address range of the Bastion subnet 
+FW_SUBNET_PREFIX=10.0.0.0/26 # IP address range of the Firewall subnet
+JUMPBOX_SUBNET_PREFIX=10.0.0.64/26 # IP address range of the Jumpbox subnet
+
+# Spoke VNet
+SPOKE_VNET_NAME=Spoke_VNET
+JUMPBOX_SUBNET_NAME=JumpboxSubnet
+ENDPOINTS_SUBNET_NAME=endpoints-subnet
+APPGW_SUBNET_NAME=app-gw-subnet
+AKS_SUBNET_NAME=aks-subnet
+LOADBALANCER_SUBNET_NAME=loadbalancer-subnet
+SPOKE_VNET_PREFIX=10.1.0.0/22 # IP address range of the Virtual network (VNet).
+AKS_SUBNET_PREFIX=10.1.0.0/24 # IP address range of the AKS subnet
+LOADBALANCER_SUBNET_PREFIX=10.1.1.0/28 # IP address range of the Loadbalancer subnet
+APPGW_SUBNET_PREFIX=10.1.2.0/24 # IP address range of the Application Gateway subnet
+ENDPOINTS_SUBNET_PREFIX=10.1.1.16/28 # IP address range of the Endpoints subnet
+
+# Infrastructure
+HUB_RG=rg-hub
+SPOKE_RG=rg-spoke
+LOCATION=koreacentral 
+BASTION_NSG_NAME=Bastion_NSG
+JUMPBOX_NSG_NAME=Jumpbox_NSG
+AKS_NSG_NAME=Aks_NSG
+ENDPOINTS_NSG_NAME=Endpoints_NSG
+LOADBALANCER_NSG_NAME=Loadbalancer_NSG
+APPGW_NSG=Appgw_NSG
+FW_NAME=azure-firewall
+APPGW_NAME=AppGateway
+ROUTE_TABLE_NAME=spoke-rt
+AKS_IDENTITY_NAME=aks-msi
+JUMPBOX_VM_NAME=Jumpbox-VM
+AKS_CLUSTER_NAME=private-aks
+ACR_NAME="aksacr$RANDOM"
+STUDENT_NAME=ian # don't use spaces
+
+PRIVATE_DNS_LINK_NAME="aksprivatednslink"
+; PRIVATE_ENDPOINT_NAME="aksprivatednslink"
+PRIVATE_CONNECTION_NAME="aks-private-connection"
+
+## **1️⃣ AKS Private Link 설정**
+
+# AKS 리소스 ID 확인
+RESOURCE_ID=$(az aks show \
+    --resource-group $SPOKE_RG \
+    --name $AKS_CLUSTER_NAME \
+    --query "id" \
+    --output tsv)
+
+echo "RESOURCE_ID: $RESOURCE_ID"
+
+# AKS의 Private Link group ID는 "management"로 고정
+GROUP_ID="management"
+echo "GROUP_ID: $GROUP_ID"
+
+# Private Endpoint 생성
+az network private-endpoint create \
+    --resource-group $SPOKE_RG \
+    --name $PRIVATE_ENDPOINT_NAME \
+    --vnet-name $SPOKE_VNET_NAME \
+    --subnet $ENDPOINTS_SUBNET_NAME \
+    --private-connection-resource-id $RESOURCE_ID \
+    --group-id $GROUP_ID \
+    --connection-name $PRIVATE_CONNECTION_NAME
+
+## **2️⃣ Private IP 및 FQDN 확인**
+
+# Private IP 주소 조회
+PRIVATE_IP=$(az network nic show \
+    --ids $(az network private-endpoint show \
+        --resource-group $SPOKE_RG \
+        --name $PRIVATE_ENDPOINT_NAME \
+        --query "networkInterfaces[0].id" \
+        --output tsv) \
+    --query "ipConfigurations[0].privateIPAddress" \
+    --output tsv)
+
+echo "PRIVATE_IP: $PRIVATE_IP"
+
+# AKS API 서버의 FQDN 확인
+AKS_FQDN=$(az aks show \
+    --resource-group $SPOKE_RG \
+    --name $AKS_CLUSTER_NAME \
+    --query 'privateFqdn' \
+    --output tsv)
+
+echo "AKS API Server FQDN: $AKS_FQDN"
+
+## **3️⃣ DNS 설정**
+
+# Azure DNS 서버 설정
+sudo rm /etc/resolv.conf
+sudo cat > /etc/resolv.conf << EOF
+nameserver 168.63.129.16
+search privatelink.koreacentral.azmk8s.io
+EOF
+
+# Private DNS 레코드 추가
+FULL_PREFIX=$(echo $AKS_FQDN | cut -d'.' -f1-2)
+echo "Full Prefix: $FULL_PREFIX"
+
+az network private-dns record-set a create \
+    --resource-group $SPOKE_RG \
+    --zone-name "privatelink.$LOCATION.azmk8s.io" \
+    --name "$FULL_PREFIX" \
+    --ttl 3600
+
+az network private-dns record-set a add-record \
+    --resource-group $SPOKE_RG \
+    --zone-name "privatelink.$LOCATION.azmk8s.io" \
+    --record-set-name "$FULL_PREFIX" \
+    --ipv4-address $PRIVATE_IP
+
+# Hub VNet에 Private DNS Zone 링크 추가
+az network private-dns link vnet create \
+    --resource-group $SPOKE_RG \
+    --zone-name "privatelink.$LOCATION.azmk8s.io" \
+    --name "hubvnetlink" \
+    --virtual-network $(az network vnet show -g $HUB_RG -n $HUB_VNET_NAME --query id -o tsv) \
+    --registration-enabled false
+
+## **4️⃣ 설정 확인**
+
+# Private DNS Zone 확인
+az network private-dns zone list \
+    --resource-group $SPOKE_RG \
+    --output table
+
+# Private DNS Zone 링크 확인
+az network private-dns link vnet list \
+    --resource-group $SPOKE_RG \
+    --zone-name "privatelink.$LOCATION.azmk8s.io" \
+    --output table
+
+# DNS 레코드 확인
+az network private-dns record-set a list \
+    --resource-group $SPOKE_RG \
+    --zone-name "privatelink.$LOCATION.azmk8s.io" \
+    --query "[].{Name:name, Records:aRecords[].ipv4Address, TTL:ttl}" \
+    --output table
+
+## **5️⃣ 연결 테스트**
+
+# kubeconfig 업데이트
+az aks get-credentials \
+    --resource-group $SPOKE_RG \
+    --name $AKS_CLUSTER_NAME \
+    --overwrite-existing
+
+# 클러스터 연결 테스트
+kubectl get nodes

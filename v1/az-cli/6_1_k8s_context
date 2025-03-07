@@ -1,0 +1,86 @@
+
+SPOKE_RG=rg-spoke
+AKS_CLUSTER_NAME=private-aks
+az aks get-credentials --resource-group $SPOKE_RG --name $AKS_CLUSTER_NAME
+
+
+SUBSCRIPTION_ID=$(az account show --query id --output tsv)
+az account set --subscription $SUBSCRIPTION_ID
+LOCATION="koreacentral"
+
+echo "SUBSCRIPTION_ID: $SUBSCRIPTION_ID"
+echo "LOCATION: $LOCATION"
+
+### 1. **새로운 AKS 클러스터 컨텍스트 가져오기**
+# 새로운 AKS 클러스터로 전환하려면 먼저 컨텍스트 정보를 가져와야 합니다.  
+
+; az login
+az aks get-credentials --resource-group $SPOKE_RG --name $AKS_CLUSTER_NAME
+
+### 2. **현재 설정된 컨텍스트 확인**
+먼저 현재 사용 중인 컨텍스트를 확인합니다.  
+
+```sh
+kubectl config current-context
+```
+
+또는 모든 컨텍스트 목록을 확인합니다.  
+
+```sh
+kubectl config get-contexts
+```
+
+---
+
+
+이 명령어를 실행하면 현재 사용 중인 `~/.kube/config` 파일에 새로운 클러스터 정보가 추가됩니다.  
+
+---
+
+### 3. **컨텍스트 전환**
+이미 여러 AKS 클러스터의 컨텍스트가 등록되어 있다면, 특정 클러스터로 전환할 수 있습니다.  
+
+```sh
+kubectl config use-context $AKS_CLUSTER_NAME
+```
+
+예제:
+```sh
+kubectl config use-context $AKS_CLUSTER_NAME
+```
+
+---
+
+### 4. **컨텍스트 자동 전환을 위한 alias 설정 (옵션)**
+자주 사용하는 클러스터가 여러 개라면 `.bashrc` 또는 `.zshrc`에 alias를 추가하면 편리합니다.  
+
+```sh
+alias aks-public="kubectl config use-context $AKS_CLUSTER_NAME_1"
+alias aks-private="kubectl config use-context $AKS_CLUSTER_NAME_2"
+```
+
+이제 아래 명령어로 간편하게 컨텍스트 전환이 가능합니다.  
+
+```sh
+aks-public
+aks-private
+```
+
+---
+
+### 5. **컨텍스트 제거 (필요한 경우)**
+사용하지 않는 컨텍스트를 삭제하려면 아래 명령을 실행합니다.  
+
+```sh
+kubectl config delete-context $AKS_CLUSTER_NAME_1
+kubectl config delete-context $AKS_CLUSTER_NAME_2
+```
+
+또한, AKS 인증 정보를 삭제하려면 `remove-credentials`을 사용할 수 있습니다.  
+
+```sh
+az aks remove-credentials --resource-group $RESOURCE_GROUP_1 --name $AKS_CLUSTER_NAME_1
+az aks remove-credentials --resource-group $RESOURCE_GROUP_2 --name $AKS_CLUSTER_NAME_2
+```
+
+---

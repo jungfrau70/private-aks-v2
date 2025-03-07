@@ -1,0 +1,128 @@
+ 
+**오퍼레이터, 운영자, 관리자 그룹을 생성하고 사용자를 추가**
+
+---
+
+## **🔹 Azure AD 사용자 및 그룹 생성**  
+
+### **🔹 ① Azure AD 그룹 생성 (오퍼레이터, 운영자, 관리자)**  
+```bash
+
+# 오퍼레이터 그룹 생성
+az ad group create --display-name aks-operators --mail-nickname aks-operators
+
+# 운영자 그룹 생성
+az ad group create --display-name aks-admins --mail-nickname aks-admins
+
+# 관리자 그룹 생성
+az ad group create --display-name aks-cluster-admins --mail-nickname aks-cluster-admins
+
+# 개발자 그룹 생성
+az ad group create --display-name aks-developers --mail-nickname aks-developers
+
+# 사용자의 `Object ID`
+OPERATOR_OBJECT_ID=$(az ad user show --id operator@jupyteronlinegmail.onmicrosoft.com --query id --output tsv)
+ADMIN_OBJECT_ID=$(az ad user show --id admin@jupyteronlinegmail.onmicrosoft.com --query id --output tsv)
+CLUSTER_ADMIN_OBJECT_ID=$(az ad user show --id clusteradmin@jupyteronlinegmail.onmicrosoft.com --query id --output tsv)
+DEVELOPER_OBJECT_ID=$(az ad user show --id developer@jupyteronlinegmail.onmicrosoft.com --query id --output tsv)
+
+# 확인
+echo "Operator: $OPERATOR_OBJECT_ID"
+echo "Admin: $ADMIN_OBJECT_ID"
+echo "Cluster Admin: $CLUSTER_ADMIN_OBJECT_ID"
+echo "Developer: $DEVELOPER_OBJECT_ID"
+
+
+### **🔹 ③ 사용자들을 그룹에 추가**  
+
+# 오퍼레이터 그룹에 사용자 추가
+az ad group member add --group aks-operators --member-id $OPERATOR_OBJECT_ID
+
+# 운영자 그룹에 사용자 추가
+az ad group member add --group aks-admins --member-id $ADMIN_OBJECT_ID
+
+# 관리자 그룹에 사용자 추가
+az ad group member add --group aks-cluster-admins --member-id $CLUSTER_ADMIN_OBJECT_ID
+
+# 개발자 그룹에 사용자 추가
+az ad group member add --group aks-developers --member-id $DEVELOPER_OBJECT_ID
+
+
+### 🔹 그룹 목록 조회 **
+az ad group list --query "[].{Name:displayName, ObjectId:id}" --output table
+
+
+
+```
+
+
+aks-admins            34845741-0882-4a37-9126-472dcad20b1c
+aks-operators         4c2242cd-311a-4236-8ab4-36f6131e2a9c
+aks-developers        51616aaf-a355-4338-ad3a-b84018086054
+aks-operators-admins  5667e0ca-917b-4c8d-9c36-2ccec2d82a08
+aks-cluster-admins    662c2cf6-1086-44d1-922d-91a8eb0a005d
+
+
+<!-- 
+
+#####################################################################################################################
+### **🔹 ④ Azure AD에서 계정이 정상적으로 생성되었는지 확인**  
+
+### 모든 사용자 목록 조회  
+```bash
+az ad user list --output table
+```
+
+### 특정 사용자 계정 확인  
+```bash
+az ad user show --id operator@jupyteronlinegmail.onmicrosoft.com
+```
+
+
+#####################################################################################################################
+
+Azure AD에서 특정 계정을 삭제
+
+### 특정 사용자 계정 삭제  
+```bash
+az ad user delete --id operator@jupyteronlinegmail.onmicrosoft.com
+```
+
+
+#####################################################################################################################
+
+
+## 1️⃣ **Azure CLI를 사용하여 그룹별 사용자 확인**  
+먼저, 그룹의 `Object ID`를 확인한 후 해당 그룹에 속한 사용자를 조회합니다.
+
+### 🔹 그룹 Object ID 확인
+```sh
+az ad group list --query "[].{Name:displayName, ObjectId:id}" --output table
+```
+
+### 🔹 특정 그룹의 사용자 목록 조회
+```sh
+az ad group member list --group "<GROUP_OBJECT_ID>" --query "[].{Name:displayName, UserId:id}" --output table
+```
+💡 `<GROUP_OBJECT_ID>` 부분에 확인하려는 그룹의 Object ID를 입력하세요.
+
+---
+
+
+## 1️⃣ **Azure CLI로 그룹 삭제**  
+Azure CLI를 사용하여 그룹을 삭제하려면 다음 명령어를 실행합니다.
+
+### 🔹 그룹 Object ID 확인  
+```sh
+az ad group list --query "[].{Name:displayName, ObjectId:id}" --output table
+```
+
+### 🔹 특정 그룹 삭제  
+```sh
+az ad group delete --group "<GROUP_OBJECT_ID>"
+```
+💡 `<GROUP_OBJECT_ID>` 부분을 삭제하려는 그룹의 Object ID로 변경하세요.
+
+--- -->
+
+

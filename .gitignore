@@ -1,0 +1,26 @@
+# 환경변수 파일
+*.env*
+*/env/*
+
+# Python package
+*/venv/*
+
+# 테라폼 파일
+.terraform
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# 테라폼 환경 변수
+*/terraform.tfvars
+
+# 로그
+terraform_logs/
+*.log
+
+# IDE
+.vscode/
+.idea/ terraform-spoke/environments/dev/env/.env.spoke
+terraform-spoke/environments/dev/terraform.tfvars
+.terraform/
+*.exe

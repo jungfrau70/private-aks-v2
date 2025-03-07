@@ -1,0 +1,46 @@
+env:
+- name: TITLE
+  value: "AKS 워크숍 샘플 애플리케이션"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-app
+spec:
+  ports:
+  - port: 80
+  selector:
+    app: sample-app
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sample-app-ingress
+  annotations:
+    kubernetes.io/ingress.class: azure/application-gateway
+    appgw.ingress.kubernetes.io/ssl-redirect: "false"
+    appgw.ingress.kubernetes.io/use-private-ip: "false"
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: sample-app
+            port:
+              number: 80
+EOF
+
+echo "AGIC 설정이 완료되었습니다."
+echo "Application Gateway 공용 IP를 통해 애플리케이션에 접근할 수 있습니다."
+APP_GW_PUBLIC_IP=$(az network public-ip show \
+  --resource-group $RESOURCE_GROUP \
+  --name $(az network application-gateway show \
+    --resource-group $RESOURCE_GROUP \
+    --name $APP_GW_NAME \
+    --query "frontendIPConfigurations[?contains(name, 'Public')].publicIPAddress.id" -o tsv | cut -d'/' -f9) \
+  --query ipAddress -o tsv)
+
+echo "애플리케이션 URL: http://$APP_GW_PUBLIC_IP" 

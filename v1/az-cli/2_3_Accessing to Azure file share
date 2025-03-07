@@ -1,0 +1,37 @@
+
+
+먼저 마운트에 필요한 정보를 가져옵니다:
+
+# Azure Cloud Shell
+1. cloud shell 실행 환경에 Storage (file share) 마운트
+2. 마운트 포인트 확인 (심볼릭 링크 생성하여 편리하게 사용)
+
+# Azure CLI
+```bash
+
+export STORAGE_RESOURCE_GROUP=rg-shared_storage
+export AZURE_STORAGE_ACCOUNT=sa1sharedstorage
+export STORAGE_FILE_SHARE_NAME=quicksciripts
+export LOCATION=koreacentral
+
+# 파일 리스트 확인
+az storage file list \
+  --share-name $STORAGE_FILE_SHARE_NAME \
+  --output table
+
+# 파일 다운로드
+az storage file download \
+  --share-name $STORAGE_FILE_SHARE_NAME \
+  --path [remote-file-path] \
+  --dest [local-file-path]
+
+# 파일 업로드
+az storage file upload \
+  --share-name $STORAGE_FILE_SHARE_NAME \
+  --source [local-file-path] \
+  --path [remote-file-path]
+
+```
+
+
+

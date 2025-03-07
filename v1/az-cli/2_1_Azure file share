@@ -1,0 +1,21 @@
+```sh
+
+STORAGE_RESOURCE_GROUP=rg-shared_storage
+STORAGE_ACCOUNT_NAME=sa1sharedstorage
+STORAGE_FILE_SHARE_NAME=quicksciripts
+LOCATION=koreacentral
+
+az group create --name $STORAGE_RESOURCE_GROUP --location $LOCATION
+
+az storage account create \
+  --name $STORAGE_ACCOUNT_NAME \
+  --resource-group $STORAGE_RESOURCE_GROUP \
+  --location $LOCATION \
+  --sku Standard_LRS
+
+az storage share create \
+  --name $STORAGE_FILE_SHARE_NAME \
+  --account-name $STORAGE_ACCOUNT_NAME \
+  --quota 10
+
+```

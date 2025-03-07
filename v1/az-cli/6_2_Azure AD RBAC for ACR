@@ -1,0 +1,71 @@
+# 환경 변수 설정
+HUB_RG=rg-hub
+SPOKE_RG=rg-spoke
+LOCATION=koreacentral
+AKS_CLUSTER_NAME=private-aks
+
+# ACR 정보 가져오기
+ACR_NAME=$(az acr list --resource-group $HUB_RG --query "[0].name" -o tsv)
+ACR_LOGIN_SERVER=$(az acr show --name $ACR_NAME --resource-group $HUB_RG --query "loginServer" -o tsv)
+
+echo "ACR_NAME: $ACR_NAME"
+echo "ACR_LOGIN_SERVER: $ACR_LOGIN_SERVER"
+
+## **1️⃣ AKS Managed Identity 설정**
+
+# AKS의 Managed Identity 상태 확인
+echo "Checking AKS Managed Identity status..."
+az aks show \
+    --resource-group $SPOKE_RG \
+    --name $AKS_CLUSTER_NAME \
+    --query "identityProfile" \
+    --output table
+
+# Azure AD 그룹 목록 확인
+az ad group list --query "[].{Name:displayName, ObjectId:id}" --output table
+
+# AKS의 Managed Identity ID 가져오기
+AKS_MANAGED_ID=$(az aks show \
+    --resource-group $SPOKE_RG \
+    --name $AKS_CLUSTER_NAME \
+    --query identityProfile.kubeletidentity.objectId \
+    -o tsv)
+
+echo "AKS Managed Identity: $AKS_MANAGED_ID"
+
+## **2️⃣ ACR RBAC 설정**
+
+# aks-developers 그룹 ID 저장
+DEVELOPER_GROUP_OBJECT_ID=$(az ad user show --id developer@jupyteronlinegmail.onmicrosoft.com --query id --output tsv)
+echo "AKS Developers Group ID: $DEVELOPER_GROUP_OBJECT_ID"
+
+# ACR ID 가져오기
+ACR_ID=$(az acr show \
+    --name $ACR_NAME \
+    --resource-group $HUB_RG \
+    --query id \
+    --output tsv)
+
+echo "ACR ID: $ACR_ID"
+
+# AKS Managed Identity에 ACR Pull 권한 부여
+az role assignment create \
+    --assignee $AKS_MANAGED_ID \
+    --role AcrPull \
+    --scope $ACR_ID
+
+# Developer 사용자에게 ACR Push 권한 부여
+az role assignment create \
+    --role AcrPush \
+    --assignee-object-id $DEVELOPER_GROUP_OBJECT_ID \
+    --assignee-principal-type Group \
+    --scope $ACR_ID
+
+# RBAC 할당 확인
+echo "Checking role assignments for ACR..."
+az role assignment list \
+    --scope $ACR_ID \
+    --query "[].{Principal:principalName, Role:roleDefinitionName}" \
+    --output table
+
+

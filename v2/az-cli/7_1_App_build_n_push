@@ -1,0 +1,206 @@
+## **1️⃣ 환경 변수 설정**
+
+```bash
+# 기본 환경 변수 설정
+source ./env.sh
+
+# ACR 정보 가져오기
+ACR_NAME=$(az acr list --resource-group $HUB_RG --query "[0].name" -o tsv)
+ACR_LOGIN_SERVER=$(az acr show --name $ACR_NAME --resource-group $HUB_RG --query "loginServer" -o tsv)
+
+echo "ACR_NAME: $ACR_NAME"
+echo "ACR_LOGIN_SERVER: $ACR_LOGIN_SERVER"
+
+# 작업 디렉토리 생성
+mkdir -p app kubernetes
+```
+
+## **2️⃣ FastAPI 애플리케이션 작성**
+
+```bash
+# FastAPI 애플리케이션 코드 작성
+cat << 'EOF' > app/main.py
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from datetime import datetime
+import socket
+
+app = FastAPI()
+
+async def generate_html_response(request: Request):
+    try:
+        hostname = socket.gethostname()
+        client_host = request.client.host if request.client else "unknown"
+        path = request.url.path
+        headers = dict(request.headers)
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        html_content = f"""
+        <html>
+            <head>
+                <title>Path Info</title>
+                <style>
+                    body {{
+                        font-family: Arial, sans-serif;
+                        margin: 40px;
+                        background-color: #f0f0f0;
+                    }}
+                    .container {{
+                        background-color: white;
+                        padding: 20px;
+                        border-radius: 8px;
+                        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                    }}
+                    .info-item {{
+                        margin: 10px 0;
+                        padding: 10px;
+                        background-color: #f8f9fa;
+                        border-radius: 4px;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>요청 정보</h1>
+                    <div class="info-item">
+                        <strong>현재 시간:</strong> {current_time}
+                    </div>
+                    <div class="info-item">
+                        <strong>클라이언트 IP:</strong> {client_host}
+                    </div>
+                    <div class="info-item">
+                        <strong>요청 경로:</strong> {path}
+                    </div>
+                    <div class="info-item">
+                        <strong>서버 호스트명:</strong> {hostname}
+                    </div>
+                    <div class="info-item">
+                        <strong>요청 헤더:</strong>
+                        <pre>{headers}</pre>
+                    </div>
+                </div>
+            </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "path": request.url.path}
+        )
+
+@app.get("/")
+async def root(request: Request):
+    return await generate_html_response(request)
+
+@app.get("/path")
+async def path(request: Request):
+    return await generate_html_response(request)
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+EOF 
+
+# Dockerfile 작성
+cat << 'EOF' > app/Dockerfile
+FROM python:3.9-slim
+
+WORKDIR /app
+COPY main.py .
+
+RUN pip install fastapi uvicorn[standard]
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
+EOF
+
+# requirements.txt 작성
+cat << 'EOF' > app/requirements.txt
+fastapi==0.68.0
+uvicorn[standard]==0.15.0
+EOF
+```
+
+## **3️⃣ Kubernetes 매니페스트 작성**
+
+```bash
+# Deployment 및 Service 매니페스트 작성
+cat << EOF > kubernetes/path-app.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: path-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: path-app
+  template:
+    metadata:
+      labels:
+        app: path-app
+    spec:
+      containers:
+      - name: path-app
+        image: $ACR_LOGIN_SERVER/path-app:v1.1
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 250m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: path-app-service
+spec:
+  selector:
+    app: path-app
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+EOF
+```
+
+## **4️⃣ 이미지 빌드 및 배포**
+
+```bash
+# 1. 이미지 빌드 및 푸시
+cd app
+az acr build --registry $ACR_NAME --image path-app:v1.1 .
+
+# 2. Kubernetes 리소스 배포
+cd ..
+kubectl apply -f kubernetes/path-app.yaml
+
+# 3. 배포 상태 확인
+echo "배포 상태 확인 중..."
+kubectl wait --for=condition=ready pod -l app=path-app --timeout=60s
+kubectl get pods,svc -l app=path-app
+```
+
+주요 기능:
+1. FastAPI를 사용한 웹 애플리케이션
+2. 요청 정보를 HTML로 표시
+3. 상태 확인 엔드포인트 제공
+4. 컨테이너화 및 ACR 저장
+5. Kubernetes 배포 구성
+
+이제 애플리케이션이 AKS 클러스터에 배포되었습니다. 다음 단계에서 Kubernetes 내부 테스트를 진행할 수 있습니다.

@@ -1,0 +1,97 @@
+## **1️⃣ KeyVault RBAC 설정**
+
+# 환경 변수 설정
+HUB_RG=rg-hub
+SPOKE_RG=rg-spoke
+LOCATION=koreacentral
+AKS_CLUSTER_NAME=private-aks
+
+# KeyVault 정보 가져오기
+KEYVAULT_NAME=$(az keyvault list --resource-group $HUB_RG --query "[0].name" -o tsv)
+echo "KEYVAULT_NAME: $KEYVAULT_NAME"
+
+# Azure AD 그룹 ID 가져오기
+OPERATORS_GROUP_ID=$(az ad group show --group aks-operators --query id --output tsv)
+ADMINS_GROUP_ID=$(az ad group show --group aks-admins --query id --output tsv)
+CLUSTER_ADMINS_GROUP_ID=$(az ad group show --group aks-cluster-admins --query id --output tsv)
+DEVELOPERS_GROUP_ID=$(az ad group show --group aks-developers --query id --output tsv)
+
+echo "Operators Group ID: $OPERATORS_GROUP_ID"
+echo "Admins Group ID: $ADMINS_GROUP_ID"
+echo "Cluster Admins Group ID: $CLUSTER_ADMINS_GROUP_ID"
+echo "Developers Group ID: $DEVELOPERS_GROUP_ID"
+
+# AKS의 Managed Identity ID 가져오기
+AKS_MANAGED_ID=$(az aks show \
+    --resource-group $SPOKE_RG \
+    --name $AKS_CLUSTER_NAME \
+    --query identityProfile.kubeletidentity.objectId \
+    -o tsv)
+
+echo "AKS Managed Identity: $AKS_MANAGED_ID"
+
+# KeyVault ID 가져오기
+KEYVAULT_ID=$(az keyvault show \
+    --name $KEYVAULT_NAME \
+    --resource-group $HUB_RG \
+    --query id \
+    --output tsv)
+
+echo "KeyVault ID: $KEYVAULT_ID"
+
+# KeyVault 액세스 정책 설정
+az keyvault update \
+    --name $KEYVAULT_NAME \
+    --resource-group $HUB_RG \
+    --enable-rbac-authorization true
+
+# 현재 사용자의 Object ID 가져오기
+CURRENT_USER_ID=$(az ad signed-in-user show --query id -o tsv)
+echo "Current User ID: $CURRENT_USER_ID"
+
+# 현재 사용자에게 KeyVault 관리자 권한 부여
+az role assignment create \
+    --assignee $CURRENT_USER_ID \
+    --role "Key Vault Administrator" \
+    --scope $KEYVAULT_ID
+
+# 관리자 그룹에 Key Vault 관리자 권한 부여
+az role assignment create \
+    --assignee-object-id $CLUSTER_ADMINS_GROUP_ID \
+    --role "Key Vault Administrator" \
+    --scope $KEYVAULT_ID \
+    --assignee-principal-type Group
+
+# AKS Managed Identity에 KeyVault Secrets User 권한 부여
+az role assignment create \
+    --assignee $AKS_MANAGED_ID \
+    --role "Key Vault Secrets User" \
+    --scope $KEYVAULT_ID
+
+# Developer 그룹에 KeyVault Secrets Officer 권한 부여
+az role assignment create \
+    --assignee-object-id $DEVELOPERS_GROUP_ID \
+    --role "Key Vault Secrets Officer" \
+    --scope $KEYVAULT_ID \
+    --assignee-principal-type Group
+
+# RBAC 할당 확인
+echo "Checking role assignments for KeyVault..."
+az role assignment list \
+    --scope $KEYVAULT_ID \
+    --query "[].{Principal:principalName, Role:roleDefinitionName}" \
+    --output table
+
+## **2️⃣ KeyVault 시크릿 설정**
+
+# KeyVault에 시크릿 저장
+az keyvault secret set \
+    --vault-name $KEYVAULT_NAME \
+    --name "wordpress-db-password" \
+    --value "bright2n@1234"
+
+# 시크릿이 성공적으로 저장되었는지 확인
+az keyvault secret list \
+    --vault-name $KEYVAULT_NAME \
+    --query "[].{Name:name}" \
+    --output table

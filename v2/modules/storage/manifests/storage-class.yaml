@@ -1,0 +1,53 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: azurefile
+provisioner: kubernetes.io/azure-file
+parameters:
+  storageAccount: sa1sharedstorage
+  secretName: azure-storage-secret
+  shareName: quicksciripts
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-storage-secret
+type: Opaque
+data:
+  azurestorageaccountname: c2Exc2hhcmVkc3RvcmFnZQ==
+  azurestorageaccountkey: eklhaDlUWEpzaFFObzNNNFJhR0FEZzFrekpBZnB3UWIxdEJHbE1ON3Nud2RQNDY1cy85OGo2QStMQ3BTSXBKTzREcTh2aXlVNzc1WCtBU3RrT3BSd3c9PQ==
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: azurefile-pv
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: azurefile
+  azureFile:
+    secretName: azure-storage-secret
+    shareName: quicksciripts
+    readOnly: false
+  mountOptions:
+    - dir_mode=0777
+    - file_mode=0777
+    - uid=1000
+    - gid=1000
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: azurefile-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: azurefile
+  resources:
+    requests:
+      storage: 5Gi 

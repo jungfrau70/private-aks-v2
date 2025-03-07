@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# 오류 발생 시 스크립트 중단
+set -e
+
+echo "===== Azure Firewall 설정 시작 ====="
+
+# 환경 변수 설정
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+LOCATION="koreacentral"
+RESOURCE_GROUP_HUB="rg-hub-aks-workshop"
+RESOURCE_GROUP_SPOKE="rg-spoke-aks-workshop"
+FW_NAME="azure-firewall"
+FW_POLICY_NAME="fw-policy"
+
+# terraform.tfvars 파일 업데이트
+echo "terraform.tfvars 파일 업데이트 중..."
+
+# 파일이 존재하는지 확인
+if [ -f "../terraform.tfvars" ]; then
+  # 기존 파일 백업
+  cp ../terraform.tfvars ../terraform.tfvars.bak
+  
+  # 방화벽 설정 업데이트
+  sed -i "s/enable_azure_firewall = false/enable_azure_firewall = true/g" ../terraform.tfvars
+  sed -i "s/fw_name = \"azure-firewall\"/fw_name = \"$FW_NAME\"/g" ../terraform.tfvars
+  sed -i "s/fw_policy_name = \"fw-policy\"/fw_policy_name = \"$FW_POLICY_NAME\"/g" ../terraform.tfvars
+  
+  echo "terraform.tfvars 파일이 업데이트되었습니다."
+else
+  echo "terraform.tfvars 파일이 존재하지 않습니다. 먼저 terraform.tfvars 파일을 생성하세요."
+fi
+
+echo "===== Azure Firewall 설정 완료 ====="
+echo "terraform.tfvars 파일에서 다음 설정을 확인하세요:"
+echo "enable_azure_firewall = true"
+echo "fw_name = \"$FW_NAME\""
+echo "fw_policy_name = \"$FW_POLICY_NAME\"" 

@@ -1,0 +1,164 @@
+## **1️⃣ 환경 변수 설정**
+
+```bash
+# 1. 기본 환경 변수 설정
+SUBSCRIPTION_ID=$(az account show --query id --output tsv)
+az account set --subscription $SUBSCRIPTION_ID
+
+LOCATION=koreacentral
+HUB_RG=rg-hub
+SPOKE_RG=rg-spoke
+AKS_CLUSTER_NAME=private-aks
+
+echo "SUBSCRIPTION_ID: $SUBSCRIPTION_ID"
+echo "LOCATION: $LOCATION"
+echo "HUB_RG: $HUB_RG"
+echo "SPOKE_RG: $SPOKE_RG"
+echo "AKS_CLUSTER_NAME: $AKS_CLUSTER_NAME"
+
+# 2. AKS 자격 증명 가져오기
+az aks get-credentials --resource-group $SPOKE_RG --name $AKS_CLUSTER_NAME --overwrite-existing
+
+# 3. 컨텍스트 확인
+current_context=$(kubectl config current-context)
+echo "Current context: $current_context"
+
+# 4. AKS 클러스터 상태 확인
+echo "노드 상태:"
+kubectl get nodes -o wide
+
+echo "시스템 Pod 상태:"
+kubectl get pods -n kube-system
+
+# 5. ACR 정보 가져오기
+ACR_NAME=$(az acr list --resource-group $HUB_RG --query "[0].name" -o tsv)
+ACR_LOGIN_SERVER=$(az acr show --name $ACR_NAME --resource-group $HUB_RG --query "loginServer" -o tsv)
+
+echo "ACR_NAME: $ACR_NAME"
+echo "ACR_LOGIN_SERVER: $ACR_LOGIN_SERVER"
+
+# Pod 및 Service 정보 가져오기
+POD_NAME=$(kubectl get pod -l app=path-app -o jsonpath='{.items[0].metadata.name}')
+POD_IP=$(kubectl get pod -l app=path-app -o jsonpath='{.items[0].status.podIP}')
+SERVICE_IP=$(kubectl get service path-app-service -o jsonpath='{.spec.clusterIP}')
+
+echo "Pod 이름: $POD_NAME"
+echo "Pod IP: $POD_IP"
+echo "Service IP: $SERVICE_IP"
+```
+
+## **2️⃣ Pod 상태 확인**
+
+```bash
+# 1. Pod 상태 확인
+echo "Pod 상태:"
+kubectl get pods -l app=path-app -o wide
+
+# 2. Pod 로그 확인
+echo "Pod 로그:"
+kubectl logs $POD_NAME
+
+# 3. Pod 이벤트 확인
+echo "Pod 이벤트:"
+kubectl describe pod $POD_NAME | grep -A 10 Events:
+
+# 4. Pod 메트릭 확인
+echo "Pod 메트릭:"
+kubectl top pod $POD_NAME
+```
+
+## **3️⃣ Service 상태 확인**
+
+```bash
+# 1. Service 상태 확인
+echo "Service 상태:"
+kubectl get service path-app-service
+
+# 2. Service 엔드포인트 확인
+echo "Service 엔드포인트:"
+kubectl get endpoints path-app-service
+
+# 3. Service 상세 정보
+echo "Service 상세 정보:"
+kubectl describe service path-app-service
+```
+
+## **4️⃣ 애플리케이션 기능 테스트**
+
+```bash
+# 1. Pod 직접 테스트
+echo "Pod 직접 테스트:"
+echo "루트 경로:"
+kubectl exec -it $POD_NAME -- wget -qO- localhost/
+
+echo "Path 경로:"
+kubectl exec -it $POD_NAME -- wget -qO- localhost/path
+
+echo "Health 경로:"
+kubectl exec -it $POD_NAME -- wget -qO- localhost/health
+
+# 2. Service 테스트
+echo "Service 테스트:"
+kubectl run -it --rm --restart=Never busybox --image=busybox:1.28 -- wget -qO- http://$SERVICE_IP/path
+
+# 3. 다른 Pod에서 테스트
+echo "다른 Pod에서 테스트:"
+kubectl run -it --rm --restart=Never busybox --image=busybox:1.28 -- wget -qO- http://$SERVICE_IP/path
+```
+
+## **5️⃣ 부하 테스트**
+
+```bash
+# 1. 임시 부하 테스트 Pod 생성
+cat << EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: load-test
+spec:
+  containers:
+  - name: load-test
+    image: busybox:1.28
+    command: ["/bin/sh", "-c", "while true; do wget -qO- http://$SERVICE_IP/path; sleep 1; done"]
+EOF
+
+# 2. 부하 테스트 로그 확인
+kubectl logs -f load-test
+
+# 3. 메트릭 모니터링
+watch -n 1 "kubectl top pods -l app=path-app"
+
+# 4. 부하 테스트 정리
+kubectl delete pod load-test
+```
+
+## **6️⃣ 스케일링 테스트**
+
+```bash
+# 1. 수동 스케일링
+echo "Pod 스케일 아웃:"
+kubectl scale deployment path-app --replicas=3
+
+# 2. 스케일링 결과 확인
+echo "Pod 상태 확인:"
+kubectl get pods -l app=path-app -o wide
+
+# 3. 엔드포인트 확인
+echo "Service 엔드포인트 확인:"
+kubectl get endpoints path-app-service
+
+# 4. 부하 분산 테스트
+for i in {1..10}; do
+  kubectl run -it --rm --restart=Never busybox-$i \
+    --image=busybox:1.28 -- wget -qO- http://$SERVICE_IP/path
+done
+```
+
+주요 확인 사항:
+1. Pod가 정상적으로 실행 중인지 확인
+2. Service가 Pod와 올바르게 연결되어 있는지 확인
+3. 애플리케이션이 모든 경로에서 정상 응답하는지 확인
+4. 부하 테스트 시 안정적으로 동작하는지 확인
+5. 스케일링이 정상적으로 동작하는지 확인
+
+이제 애플리케이션이 Kubernetes 클러스터 내에서 정상적으로 동작하는 것을 확인했습니다. 다음 단계로 AGIC 구성을 진행할 수 있습니다.

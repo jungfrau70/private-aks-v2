@@ -1,0 +1,63 @@
+ 
+### **🔹 ② 사용자 추가**  
+```bash
+
+# 오퍼레이터 사용자 생성
+az ad user create \
+    --display-name "Operator User" \
+    --user-principal-name operator@jupyteronlinegmail.onmicrosoft.com \
+    --password "bright2n@1234" \
+    --force-change-password-next-sign-in true
+
+# 운영자 사용자 생성
+az ad user create \
+    --display-name "Admin User" \
+    --user-principal-name admin@jupyteronlinegmail.onmicrosoft.com \
+    --password "bright2n@1234" \
+    --force-change-password-next-sign-in true
+
+# 관리자 사용자 생성
+az ad user create \
+    --display-name "Cluster Admin User" \
+    --user-principal-name clusteradmin@jupyteronlinegmail.onmicrosoft.com \
+    --password "bright2n@1234" \
+    --force-change-password-next-sign-in true
+
+# 개발자 사용자 생성
+az ad user create \
+    --display-name "Developer User" \
+    --user-principal-name developer@jupyteronlinegmail.onmicrosoft.com \
+    --password "bright2n@1234" \
+    --force-change-password-next-sign-in true
+
+# 사용자의 `Object ID`
+OPERATOR_OBJECT_ID=$(az ad user show --id operator@jupyteronlinegmail.onmicrosoft.com --query id --output tsv)
+ADMIN_OBJECT_ID=$(az ad user show --id admin@jupyteronlinegmail.onmicrosoft.com --query id --output tsv)
+CLUSTER_ADMIN_OBJECT_ID=$(az ad user show --id clusteradmin@jupyteronlinegmail.onmicrosoft.com --query id --output tsv)
+DEVELOPER_OBJECT_ID=$(az ad user show --id developer@jupyteronlinegmail.onmicrosoft.com --query id --output tsv)
+
+# 확인
+echo "Operator: $OPERATOR_OBJECT_ID"
+echo "Admin: $ADMIN_OBJECT_ID"
+echo "Cluster Admin: $CLUSTER_ADMIN_OBJECT_ID"
+echo "Developer: $DEVELOPER_OBJECT_ID"
+
+# 사용자 목록 조회
+az ad user list --output table
+
+
+```
+
+aks-admins            34845741-0882-4a37-9126-472dcad20b1c
+aks-operators         4c2242cd-311a-4236-8ab4-36f6131e2a9c
+aks-developers        51616aaf-a355-4338-ad3a-b84018086054
+aks-operators-admins  5667e0ca-917b-4c8d-9c36-2ccec2d82a08
+aks-cluster-admins    662c2cf6-1086-44d1-922d-91a8eb0a005d
+
+
+DisplayName         UserPrincipalName                                                GivenName    PreferredLanguage    Surname
+------------------  ---------------------------------------------------------------  -----------  -------------------  ---------
+Admin User          admin@jupyteronlinegmail.onmicrosoft.com
+Cluster Admin User  clusteradmin@jupyteronlinegmail.onmicrosoft.com
+Developer User      developer@jupyteronlinegmail.onmicrosoft.com
+Operator User       operator@jupyteronlinegmail.onmicrosoft.com

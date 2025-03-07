@@ -1,0 +1,85 @@
+
+# user : azureuser
+# password : bright2n@1234
+
+```bash
+
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+sudo apt-get update && sudo apt-get install -y ca-certificates curl
+sudo curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+rm kubectl
+
+sudo snap install docker
+sudo groupadd docker
+sudo usermod -aG docker $USER
+
+sudo snap install kubectl --classic
+sudo snap install helm --classic
+
+# API 서버 주소(private-aks-ingress) 추가
+vi /etc/hosts
+10.1.0.4 private-ak-rg-spoke-b6f97a-5fj42y00.6ae91f14-1cf4-4596-a6e9-cdf12cae3c1a.privatelink.koreacentral.azmk8s.io
+
+
+```
+az network private-dns link vnet list \
+  --resource-group mc_rg-spoke_private-aks_koreacentral \
+  --zone-name fc0e940d-e67e-48bb-852a-89905464b469.privatelink.koreacentral.azmk8s.io \
+  --query "[].{Name:name,VirtualNetwork:virtualNetwork.id}"
+
+
+
+az network private-dns link vnet create \
+  --resource-group mc_rg-spoke_private-aks_koreacentral \
+  --zone-name fc0e940d-e67e-48bb-852a-89905464b469.privatelink.koreacentral.azmk8s.io \
+  --name Jumpbox-DNS-Link \
+  --virtual-network <JUMPBOX_VNET_ID> \
+  --registration-enabled false
+
+
+
+azureuser@jumpbox-vm:~$ az network private-dns zone list --query "[].{Name:name,ResourceGroup:resourceGroup}"
+[
+  {
+    "Name": "fc0e940d-e67e-48bb-852a-89905464b469.privatelink.koreacentral.azmk8s.io",
+    "ResourceGroup": "mc_rg-spoke_private-aks_koreacentral"
+  }
+]
+
+
+azureuser@jumpbox-vm:~$ az network private-dns link vnet list \
+>   --resource-group mc_rg-spoke_private-aks_koreacentral \
+>   --zone-name fc0e940d-e67e-48bb-852a-89905464b469.privatelink.koreacentral.azmk8s.io \
+>   --query "[].{Name:name,VirtualNetwork:virtualNetwork.id}"
+
+[
+  {
+    "Name": "private-ak-rg-spoke-b6f97a-7pm3w007",
+    "VirtualNetwork": "/subscriptions/b6f97aed-4542-491f-a94c-e0f05563485c/resourceGroups/rg-spoke/providers/Microsoft.Network/virtualNetworks/Spoke_VNET"
+  }
+]
+##############################################################
+
+# JUMPBOX 
+
+uname -a
+
+sudo rm /etc/apt/sources.list.d/azure-cli.list
+
+curl -sL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ jammy main" | sudo tee /etc/apt/sources.list.d/azure-cli.list
+
+sudo apt-get update
+sudo apt-get install azure-cli
+
+
+# # ACR 로그인
+# az acr login --name $ACR_NAME --resource-group $HUB_RG
+
+
+# # KeyVault 로그인
+# az keyvault secret set --vault-name $KEYVAULT_NAME --name $SECRET_NAME --value $SECRET_VALUE
+
+

@@ -1,0 +1,20 @@
+# 1. 기존 AGIC 제거
+az aks disable-addons \
+    --name $AKS_CLUSTER_NAME \
+    --resource-group $SPOKE_RG \
+    --addons ingress-appgw
+
+# 2. AGIC 다시 설치
+az aks enable-addons \
+    --name $AKS_CLUSTER_NAME \
+    --resource-group $SPOKE_RG \
+    --addons ingress-appgw \
+    --appgw-id $APPGW_ID
+
+# 3. AGIC Pod 상태 확인 (약 1-2분 대기)
+echo "AGIC Pod 상태 확인 중..."
+sleep 60
+kubectl get pods -n kube-system -l app=ingress-azure
+
+# 4. AGIC 로그 확인
+kubectl logs -n kube-system -l app=ingress-azure 

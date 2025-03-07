@@ -1,0 +1,81 @@
+ 
+**오퍼레이터, 운영자, 관리자 그룹을 생성하고 사용자를 추가**
+
+```bash
+
+SUBSCRIPTION_ID=$(az account show --query id --output tsv)
+az account set --subscription $SUBSCRIPTION_ID
+LOCATION="koreacentral"
+
+# Variables
+STORAGE_RESOURCE_GROUP=rg-shared_storage
+STORAGE_ACCOUNT_NAME=sa1sharedstorage
+STORAGE_FILE_SHARE_NAME=quicksciripts
+LOCATION=koreacentral
+
+# Azure AD 그룹 ID 가져오기
+OPERATORS_GROUP_ID=$(az ad group show --group aks-operators --query id --output tsv)
+ADMINS_GROUP_ID=$(az ad group show --group aks-admins --query id --output tsv)
+CLUSTER_ADMINS_GROUP_ID=$(az ad group show --group aks-cluster-admins --query id --output tsv)
+DEVELOPERS_GROUP_ID=$(az ad group show --group aks-developers --query id --output tsv)
+
+echo "SUBSCRIPTION_ID: $SUBSCRIPTION_ID" 
+echo "LOCATION: $LOCATION"
+echo "STORAGE_RESOURCE_GROUP: $STORAGE_RESOURCE_GROUP"
+echo "STORAGE_ACCOUNT_NAME: $STORAGE_ACCOUNT_NAME"
+echo "STORAGE_FILE_SHARE_NAME: $STORAGE_FILE_SHARE_NAME"
+
+echo "Operators Group ID: $OPERATORS_GROUP_ID"
+echo "Admins Group ID: $ADMINS_GROUP_ID"
+echo "Cluster Admins Group ID: $CLUSTER_ADMINS_GROUP_ID"
+echo "Developers Group ID: $DEVELOPERS_GROUP_ID"
+
+SCOPE_ID="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$STORAGE_RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME"
+echo "SCOPE_ID: $SCOPE_ID"
+
+
+for OBJECT_ID in $OPERATORS_GROUP_ID $ADMINS_GROUP_ID $CLUSTER_ADMINS_GROUP_ID $DEVELOPERS_GROUP_ID; 
+do
+    # 1. '읽기 권한자 및 데이터 액세스' 또는 '스토리지 계정 기여자' 역할 할당
+    az role assignment create \
+    --assignee $OBJECT_ID \
+    --role "Reader and Data Access" \
+    --scope $SCOPE_ID
+
+    # 2. '스토리지 파일 데이터 권한 있는 기여자' 역할 할당
+    az role assignment create \
+    --assignee $OBJECT_ID \
+    --role "Storage File Data SMB Share Contributor" \
+    --scope $SCOPE_ID
+done
+
+```
+
+
+for OBJECT_ID in $OPERATORS_GROUP_ID $ADMINS_GROUP_ID $CLUSTER_ADMINS_GROUP_ID $DEVELOPERS_GROUP_ID; 
+do
+    echo "Assigning roles to $OBJECT_ID ..."
+
+    # 1. Reader and Data Access 역할 확인 및 할당
+    if ! az role assignment list --assignee $OBJECT_ID --role "Reader and Data Access" --scope /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$STORAGE_RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME --query "[].id" -o tsv | grep -q .; then
+        az role assignment create \
+        --assignee $OBJECT_ID \
+        --role "Reader and Data Access" \
+        --scope /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$STORAGE_RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME \
+        && echo "✅ Assigned 'Reader and Data Access' to $OBJECT_ID" || echo "❌ Failed to assign 'Reader and Data Access' to $OBJECT_ID"
+    else
+        echo "ℹ️  'Reader and Data Access' already assigned to $OBJECT_ID"
+    fi
+
+    # 2. Storage File Data SMB Share Contributor 역할 확인 및 할당
+    if ! az role assignment list --assignee $OBJECT_ID --role "Storage File Data SMB Share Contributor" --scope /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$STORAGE_RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME --query "[].id" -o tsv | grep -q .; then
+        az role assignment create \
+        --assignee $OBJECT_ID \
+        --role "Storage File Data SMB Share Contributor" \
+        --scope /subscriptions/$SUBSCRIPTION_ID/resourceGroups/$STORAGE_RESOURCE_GROUP/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT_NAME \
+        && echo "✅ Assigned 'Storage File Data SMB Share Contributor' to $OBJECT_ID" || echo "❌ Failed to assign 'Storage File Data SMB Share Contributor' to $OBJECT_ID"
+    else
+        echo "ℹ️  'Storage File Data SMB Share Contributor' already assigned to $OBJECT_ID"
+    fi
+done
+
