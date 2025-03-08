@@ -55,6 +55,31 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
   network_interface_ids = [azurerm_network_interface.jumpbox_nic[0].id]
   tags                = var.tags
 
+  # DNS 설정 및 필요한 도구 설치를 위한 custom_data 추가
+  custom_data = base64encode(<<-EOF
+    #!/bin/bash
+    # Azure DNS 서버 설정
+    echo "nameserver 168.63.129.16" > /etc/resolv.conf
+    echo "search privatelink.${var.location}.azmk8s.io" >> /etc/resolv.conf
+    
+    # 필요한 도구 설치
+    apt-get update
+    apt-get install -y azure-cli kubectl dnsutils
+    
+    # DNS 설정이 재부팅 후에도 유지되도록 설정
+    echo "DNS=168.63.129.16" >> /etc/systemd/resolved.conf
+    echo "Domains=privatelink.${var.location}.azmk8s.io" >> /etc/systemd/resolved.conf
+    systemctl restart systemd-resolved
+    
+    # NetworkManager 설정 (사용하는 경우)
+    if [ -d "/etc/NetworkManager/conf.d" ]; then
+      echo "[main]" > /etc/NetworkManager/conf.d/dns.conf
+      echo "dns=none" >> /etc/NetworkManager/conf.d/dns.conf
+      systemctl restart NetworkManager
+    fi
+  EOF
+  )
+
   # 추가된 설정 적용
   os_disk {
     caching              = "ReadWrite"
@@ -101,9 +126,27 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
       storage_account_uri = null # Managed Storage 사용
     }
   }
+}
 
-  # 초기 설정 스크립트
-  custom_data = base64encode(file("${path.root}/scripts/install_tools_jumpbox.sh"))
+# 도구 설치 스크립트 실행
+resource "azurerm_virtual_machine_extension" "install_tools" {
+  count                = var.use_existing_jumpbox ? 0 : 1
+  name                 = "${var.jumpbox_name}-tools-install"
+  virtual_machine_id   = azurerm_linux_virtual_machine.jumpbox[0].id
+  publisher            = "Microsoft.Azure.Extensions"
+  type                 = "CustomScript"
+  type_handler_version = "2.1"
+
+  # 로컬 스크립트 사용
+  protected_settings = jsonencode({
+    "script": "${base64encode(file("${path.module}/../../scripts/install_tools_jumpbox.sh"))}"
+  })
+
+  tags = var.tags
+
+  depends_on = [
+    azurerm_linux_virtual_machine.jumpbox
+  ]
 }
 
 # 자동 종료 설정 (선택적)

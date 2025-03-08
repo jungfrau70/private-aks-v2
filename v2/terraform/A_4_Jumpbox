@@ -1,0 +1,383 @@
+`v2/scripts/install_tools_jumpbox.sh` 스크립트를 점검해보겠습니다. 코드를 분석하여 문제가 있을 수 있는 부분을 찾고 수정하겠습니다.
+
+Read file: v2/scripts/install_tools_jumpbox.sh
+스크립트의 Docker 설치 부분과 Azure CLI 설치 부분을 더 자세히 살펴보겠습니다. 문제가 있을 수 있는 부분을 확인하고 수정하겠습니다.
+
+```shell script:v2/scripts/install_tools_jumpbox.sh
+# Azure CLI 설치
+echo "Azure CLI 설치 중..."
+if ! command -v az &> /dev/null; then
+    echo "Azure CLI가 설치되어 있지 않습니다. 설치를 시작합니다..."
+    # 기존 설치 제거 (있을 경우)
+    apt-get remove -y azure-cli
+    rm -rf /etc/apt/sources.list.d/azure-cli.list
+    rm -rf /etc/apt/sources.list.d/azure-cli.list.save
+    
+    # 새로 설치
+    curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+    
+    # 설치 확인
+    if ! command -v az &> /dev/null; then
+        echo "Azure CLI 설치 실패. 수동 설치 방법을 시도합니다..."
+        # 수동 설치 방법
+        apt-get update
+        apt-get install -y ca-certificates curl apt-transport-https lsb-release gnupg
+        mkdir -p /etc/apt/keyrings
+        curl -sLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | tee /etc/apt/keyrings/microsoft.gpg > /dev/null
+        chmod go+r /etc/apt/keyrings/microsoft.gpg
+        echo "deb [arch=`dpkg --print-architecture` signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/azure-cli.list
+        apt-get update
+        apt-get install -y azure-cli
+    fi
+else
+    echo "Azure CLI가 이미 설치되어 있습니다. 버전: $(az --version | head -n 1)"
+fi
+
+# 설치 확인
+if command -v az &> /dev/null; then
+    echo "✅ Azure CLI 설치 완료: $(az --version | head -n 1)"
+else
+    echo "❌ Azure CLI 설치 실패"
+fi
+
+# Docker 설치
+echo "Docker 설치 중..."
+if ! command -v docker &> /dev/null; then
+    echo "Docker가 설치되어 있지 않습니다. 설치를 시작합니다..."
+    # 기존 설치 제거 (있을 경우)
+    apt-get remove -y docker docker-engine docker.io containerd runc
+    
+    # 필요한 패키지 설치
+    apt-get update
+    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+    
+    # Docker 공식 GPG 키 추가
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+    
+    # Docker 저장소 설정
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    
+    # Docker 설치
+    apt-get update
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    
+    # Docker 서비스 시작 및 활성화
+    systemctl start docker
+    systemctl enable docker
+    
+    # 사용자를 docker 그룹에 추가
+    usermod -aG docker azureuser
+else
+    echo "Docker가 이미 설치되어 있습니다. 버전: $(docker --version)"
+fi
+
+# Docker 설치 확인
+if command -v docker &> /dev/null; then
+    echo "✅ Docker 설치 완료: $(docker --version)"
+    echo "Docker 서비스 상태: $(systemctl is-active docker)"
+    
+    # Docker 서비스가 실행 중이 아니면 시작
+    if [ "$(systemctl is-active docker)" != "active" ]; then
+        echo "Docker 서비스가 실행 중이 아닙니다. 시작합니다..."
+        systemctl start docker
+        systemctl enable docker
+    fi
+else
+    echo "❌ Docker 설치 실패"
+fi
+```
+이제 스크립트의 마지막 부분을 확인하고 필요한 경우 수정하겠습니다.
+
+Read file: v2/scripts/install_tools_jumpbox.sh
+스크립트의 마지막 부분을 확인하기 위해 더 많은 라인을 읽어보겠습니다.
+
+Read file: v2/scripts/install_tools_jumpbox.sh
+이제 스크립트의 마지막 부분을 수정하여 설치 후 확인 단계를 추가하겠습니다.
+
+```shell script:v2/scripts/install_tools_jumpbox.sh
+# 소유권 설정
+chown azureuser:azureuser /home/azureuser/.bashrc
+
+# 파일 공유 마운트 자동 실행 (선택적)
+# su - azureuser -c "/home/azureuser/mount_fileshare.sh"
+
+# 설치된 도구 확인 및 요약
+echo "===== 설치된 도구 확인 ====="
+echo "Azure CLI: $(command -v az &> /dev/null && az --version | head -n 1 || echo '설치되지 않음')"
+echo "Docker: $(command -v docker &> /dev/null && docker --version || echo '설치되지 않음')"
+echo "kubectl: $(command -v kubectl &> /dev/null && kubectl version --client || echo '설치되지 않음')"
+echo "Helm: $(command -v helm &> /dev/null && helm version --short || echo '설치되지 않음')"
+echo "kubectx: $(command -v kubectx &> /dev/null && echo '설치됨' || echo '설치되지 않음')"
+echo "kubens: $(command -v kubens &> /dev/null && echo '설치됨' || echo '설치되지 않음')"
+echo "k9s: $(command -v k9s &> /dev/null && k9s version --short || echo '설치되지 않음')"
+
+# Docker 서비스 상태 확인
+echo "Docker 서비스 상태: $(systemctl is-active docker)"
+
+# 사용자 그룹 확인
+echo "azureuser의 그룹: $(groups azureuser | grep -q docker && echo 'docker 그룹에 포함됨' || echo 'docker 그룹에 포함되지 않음')"
+
+# 설치 완료 메시지
+echo "===== Jumpbox 도구 설치 완료 - $(date) ====="
+echo "주의: Docker 그룹 권한을 적용하려면 VM을 재부팅하거나 사용자가 다시 로그인해야 합니다."
+echo "VM 재부팅 명령어: sudo reboot"
+```
+이제 스크립트를 실행하는 방법에 대한 안내를 추가하겠습니다. 이 스크립트는 Jumpbox VM에서 실행되어야 합니다.
+
+```markdown:v2/scripts/README.md
+# Jumpbox VM 도구 설치 안내
+
+이 디렉토리에는 Jumpbox VM에 필요한 도구를 설치하는 스크립트가 포함되어 있습니다.
+
+## 설치 방법
+
+### 1. 스크립트 파일 전송
+
+Jumpbox VM에 스크립트 파일을 전송합니다. 다음 방법 중 하나를 선택하세요:
+
+#### SCP를 사용하여 전송
+
+```bash
+scp v2/scripts/install_tools_jumpbox.sh azureuser@<JUMPBOX_IP>:/home/azureuser/
+```
+
+#### Azure CLI를 사용하여 전송
+
+```bash
+az vm run-command invoke \
+  --resource-group <RESOURCE_GROUP> \
+  --name <JUMPBOX_VM_NAME> \
+  --command-id RunShellScript \
+  --scripts "curl -o /home/azureuser/install_tools_jumpbox.sh https://raw.githubusercontent.com/yourusername/yourrepo/main/v2/scripts/install_tools_jumpbox.sh"
+```
+
+### 2. 스크립트 실행
+
+Jumpbox VM에 SSH로 접속한 후 다음 명령어를 실행합니다:
+
+```bash
+# 실행 권한 부여
+chmod +x /home/azureuser/install_tools_jumpbox.sh
+
+# 스크립트 실행 (sudo 권한 필요)
+sudo bash /home/azureuser/install_tools_jumpbox.sh
+```
+
+### 3. 설치 확인
+
+설치가 완료된 후 다음 명령어로 도구가 제대로 설치되었는지 확인합니다:
+
+```bash
+# Azure CLI 확인
+az --version
+
+# Docker 확인
+docker --version
+
+# kubectl 확인
+kubectl version --client
+```
+
+### 4. 문제 해결
+
+설치 중 문제가 발생한 경우 로그 파일을 확인하세요:
+
+```bash
+cat /var/log/jumpbox_tools_install.log
+```
+
+Docker 그룹 권한이 적용되지 않은 경우 다음 명령어를 실행하거나 VM을 재부팅하세요:
+
+```bash
+# 현재 세션에 그룹 권한 적용
+newgrp docker
+
+# 또는 VM 재부팅
+sudo reboot
+```
+
+## 설치되는 도구 목록
+
+- Azure CLI
+- Docker
+- kubectl
+- Helm
+- kubectx 및 kubens
+- k9s
+- 기타 유틸리티 (jq, git, curl 등)
+
+## 추가 스크립트
+
+설치 과정에서 다음 유틸리티 스크립트가 생성됩니다:
+
+- `/home/azureuser/get_aks_credentials.sh`: AKS 클러스터 자격 증명 가져오기
+- `/home/azureuser/mount_fileshare.sh`: Azure 파일 공유 마운트
+```
+이제 Jumpbox VM에서 스크립트를 실행하는 방법을 자동화하는 스크립트를 만들겠습니다.
+
+```shell script:v2/scripts/run_on_jumpbox.sh
+#!/bin/bash
+
+# 색상 정의
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# 로그 함수
+log() {
+    echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1"
+}
+
+error() {
+    echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] 오류:${NC} $1"
+}
+
+success() {
+    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] 성공:${NC} $1"
+}
+
+warning() {
+    echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] 주의:${NC} $1"
+}
+
+# 변수 설정
+RESOURCE_GROUP="rg-hub"
+JUMPBOX_VM_NAME="central-jumpbox"
+SCRIPT_PATH="$(pwd)/install_tools_jumpbox.sh"
+REMOTE_SCRIPT_PATH="/home/azureuser/install_tools_jumpbox.sh"
+
+# 스크립트 존재 여부 확인
+if [ ! -f "$SCRIPT_PATH" ]; then
+    error "설치 스크립트를 찾을 수 없습니다: $SCRIPT_PATH"
+    exit 1
+fi
+
+# 리소스 그룹 및 VM 이름 확인
+log "리소스 그룹 및 VM 이름 확인 중..."
+if [ -z "$RESOURCE_GROUP" ] || [ -z "$JUMPBOX_VM_NAME" ]; then
+    warning "리소스 그룹 또는 VM 이름이 설정되지 않았습니다."
+    read -p "리소스 그룹 이름을 입력하세요: " RESOURCE_GROUP
+    read -p "Jumpbox VM 이름을 입력하세요: " JUMPBOX_VM_NAME
+fi
+
+# VM 존재 여부 확인
+log "VM 존재 여부 확인 중..."
+VM_EXISTS=$(az vm show --resource-group $RESOURCE_GROUP --name $JUMPBOX_VM_NAME --query "name" -o tsv 2>/dev/null)
+if [ -z "$VM_EXISTS" ]; then
+    error "VM을 찾을 수 없습니다: $JUMPBOX_VM_NAME"
+    log "사용 가능한 VM 목록:"
+    az vm list --resource-group $RESOURCE_GROUP --query "[].name" -o tsv
+    exit 1
+fi
+success "VM 확인 완료: $JUMPBOX_VM_NAME"
+
+# 스크립트 업로드
+log "설치 스크립트 업로드 중..."
+az vm run-command invoke \
+  --resource-group $RESOURCE_GROUP \
+  --name $JUMPBOX_VM_NAME \
+  --command-id RunShellScript \
+  --scripts "cat > $REMOTE_SCRIPT_PATH << 'EOL'
+$(cat $SCRIPT_PATH)
+EOL
+chmod +x $REMOTE_SCRIPT_PATH"
+
+if [ $? -ne 0 ]; then
+    error "스크립트 업로드 실패"
+    exit 1
+fi
+success "스크립트 업로드 완료"
+
+# 스크립트 실행
+log "설치 스크립트 실행 중... (이 작업은 몇 분 정도 소요될 수 있습니다)"
+az vm run-command invoke \
+  --resource-group $RESOURCE_GROUP \
+  --name $JUMPBOX_VM_NAME \
+  --command-id RunShellScript \
+  --scripts "sudo bash $REMOTE_SCRIPT_PATH"
+
+if [ $? -ne 0 ]; then
+    error "스크립트 실행 실패"
+    exit 1
+fi
+success "스크립트 실행 완료"
+
+# 설치 확인
+log "설치 확인 중..."
+az vm run-command invoke \
+  --resource-group $RESOURCE_GROUP \
+  --name $JUMPBOX_VM_NAME \
+  --command-id RunShellScript \
+  --scripts "command -v az && command -v docker && command -v kubectl"
+
+if [ $? -ne 0 ]; then
+    warning "일부 도구가 설치되지 않았을 수 있습니다. 로그를 확인하세요."
+else
+    success "모든 도구가 설치되었습니다."
+fi
+
+# VM 재부팅 (선택적)
+read -p "VM을 재부팅하시겠습니까? (y/n): " REBOOT
+if [[ "$REBOOT" == "y" || "$REBOOT" == "Y" ]]; then
+    log "VM 재부팅 중..."
+    az vm restart --resource-group $RESOURCE_GROUP --name $JUMPBOX_VM_NAME
+    success "VM 재부팅 완료"
+fi
+
+log "Jumpbox VM 설정이 완료되었습니다."
+log "SSH 접속 명령어: ssh azureuser@<JUMPBOX_IP>"
+```
+이제 실행 권한을 부여하는 명령어를 실행하겠습니다.
+
+```bash
+chmod +x v2/scripts/run_on_jumpbox.sh
+```
+Windows 환경에서는 `chmod` 명령어가 작동하지 않습니다. 이제 모든 수정이 완료되었습니다.
+
+### 요약 및 사용 방법
+
+1. **수정된 내용**:
+   - Azure CLI 설치 부분 개선: 오류 처리 및 설치 확인 추가
+   - Docker 설치 부분 개선: 최신 설치 방법 적용, 서비스 시작 및 활성화 추가
+   - 설치 확인 단계 추가: 모든 도구가 제대로 설치되었는지 확인
+   - 사용자 그룹 권한 확인 및 안내 추가
+   - 자동화 스크립트 추가: Jumpbox VM에 스크립트를 업로드하고 실행하는 스크립트 생성
+   - 설치 안내 문서 추가: 스크립트 사용 방법 및 문제 해결 안내
+
+2. **사용 방법**:
+   - **방법 1: 자동화 스크립트 사용**
+     ```bash
+     # 로컬 환경에서 실행 (Azure CLI가 설치되어 있어야 함)
+     cd v2/scripts
+     ./run_on_jumpbox.sh
+     ```
+
+   - **방법 2: 수동 설치**
+     ```bash
+     # 1. Jumpbox VM에 스크립트 전송
+     scp v2/scripts/install_tools_jumpbox.sh azureuser@<JUMPBOX_IP>:/home/azureuser/
+
+     # 2. Jumpbox VM에 SSH로 접속
+     ssh azureuser@<JUMPBOX_IP>
+
+     # 3. 스크립트 실행
+     sudo bash /home/azureuser/install_tools_jumpbox.sh
+     ```
+
+3. **설치 후 확인**:
+   - Jumpbox VM에 SSH로 접속한 후 다음 명령어로 확인:
+     ```bash
+     az --version
+     docker --version
+     kubectl version --client
+     ```
+
+4. **문제 해결**:
+   - 로그 파일 확인: `/var/log/jumpbox_tools_install.log`
+   - Docker 그룹 권한 적용: `newgrp docker` 또는 VM 재부팅
+
+이제 Jumpbox VM에 필요한 도구를 안정적으로 설치할 수 있는 스크립트가 준비되었습니다. 이 스크립트를 사용하면 Azure CLI와 Docker 명령어가 정상적으로 작동할 것입니다.

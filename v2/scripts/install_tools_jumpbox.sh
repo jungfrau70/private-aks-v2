@@ -24,11 +24,44 @@ apt-get install -y \
     unzip \
     wget \
     vim \
-    nano
+    nano \
+    cifs-utils
 
 # Azure CLI 설치
 echo "Azure CLI 설치 중..."
-curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+if ! command -v az &> /dev/null; then
+    echo "Azure CLI가 설치되어 있지 않습니다. 설치를 시작합니다..."
+    # 기존 설치 제거 (있을 경우)
+    apt-get remove -y azure-cli
+    rm -rf /etc/apt/sources.list.d/azure-cli.list
+    rm -rf /etc/apt/sources.list.d/azure-cli.list.save
+    
+    # 새로 설치
+    curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+    
+    # 설치 확인
+    if ! command -v az &> /dev/null; then
+        echo "Azure CLI 설치 실패. 수동 설치 방법을 시도합니다..."
+        # 수동 설치 방법
+        apt-get update
+        apt-get install -y ca-certificates curl apt-transport-https lsb-release gnupg
+        mkdir -p /etc/apt/keyrings
+        curl -sLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | tee /etc/apt/keyrings/microsoft.gpg > /dev/null
+        chmod go+r /etc/apt/keyrings/microsoft.gpg
+        echo "deb [arch=`dpkg --print-architecture` signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/azure-cli.list
+        apt-get update
+        apt-get install -y azure-cli
+    fi
+else
+    echo "Azure CLI가 이미 설치되어 있습니다. 버전: $(az --version | head -n 1)"
+fi
+
+# 설치 확인
+if command -v az &> /dev/null; then
+    echo "✅ Azure CLI 설치 완료: $(az --version | head -n 1)"
+else
+    echo "❌ Azure CLI 설치 실패"
+fi
 
 # kubectl 설치
 echo "kubectl 설치 중..."
@@ -42,11 +75,51 @@ curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
 # Docker 설치
 echo "Docker 설치 중..."
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-apt-get update
-apt-get install -y docker-ce docker-ce-cli containerd.io
-usermod -aG docker azureuser
+if ! command -v docker &> /dev/null; then
+    echo "Docker가 설치되어 있지 않습니다. 설치를 시작합니다..."
+    # 기존 설치 제거 (있을 경우)
+    apt-get remove -y docker docker-engine docker.io containerd runc
+    
+    # 필요한 패키지 설치
+    apt-get update
+    apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+    
+    # Docker 공식 GPG 키 추가
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
+    
+    # Docker 저장소 설정
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+    
+    # Docker 설치
+    apt-get update
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    
+    # Docker 서비스 시작 및 활성화
+    systemctl start docker
+    systemctl enable docker
+    
+    # 사용자를 docker 그룹에 추가
+    usermod -aG docker azureuser
+else
+    echo "Docker가 이미 설치되어 있습니다. 버전: $(docker --version)"
+fi
+
+# Docker 설치 확인
+if command -v docker &> /dev/null; then
+    echo "✅ Docker 설치 완료: $(docker --version)"
+    echo "Docker 서비스 상태: $(systemctl is-active docker)"
+    
+    # Docker 서비스가 실행 중이 아니면 시작
+    if [ "$(systemctl is-active docker)" != "active" ]; then
+        echo "Docker 서비스가 실행 중이 아닙니다. 시작합니다..."
+        systemctl start docker
+        systemctl enable docker
+    fi
+else
+    echo "❌ Docker 설치 실패"
+fi
 
 # kubectx 및 kubens 설치
 echo "kubectx 및 kubens 설치 중..."
@@ -70,15 +143,27 @@ SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 echo "구독 ID: $SUBSCRIPTION_ID"
 
 # 리소스 그룹 및 AKS 클러스터 이름 설정
-SPOKE_RG=$(az group list --query "[?contains(name, 'spoke')].name" -o tsv)
-AKS_CLUSTER_NAME=$(az aks list --resource-group $SPOKE_RG --query "[0].name" -o tsv)
+# MC_로 시작하지 않고 spoke를 포함하는 리소스 그룹 찾기
+SPOKE_RG=$(az group list --query "[?contains(name, 'spoke') && !starts_with(name, 'MC_')].name" -o tsv)
 
 echo "리소스 그룹: $SPOKE_RG"
+
+# AKS 클러스터 이름 가져오기
+AKS_CLUSTER_NAME=$(az aks list --resource-group $SPOKE_RG --query "[0].name" -o tsv)
+
 echo "AKS 클러스터 이름: $AKS_CLUSTER_NAME"
+
+# 클러스터 이름이 비어있는지 확인
+if [ -z "$AKS_CLUSTER_NAME" ]; then
+    echo "오류: AKS 클러스터를 찾을 수 없습니다."
+    echo "사용 가능한 AKS 클러스터 목록:"
+    az aks list --resource-group $SPOKE_RG --output table
+    exit 1
+fi
 
 # AKS 자격 증명 가져오기
 echo "AKS 자격 증명 가져오기..."
-az aks get-credentials --resource-group $SPOKE_RG --name $AKS_CLUSTER_NAME --admin
+az aks get-credentials --resource-group $SPOKE_RG --name $AKS_CLUSTER_NAME --admin --overwrite-existing
 
 # 클러스터 상태 확인
 echo "클러스터 상태 확인..."
@@ -89,153 +174,184 @@ EOF
 chmod +x /home/azureuser/get_aks_credentials.sh
 chown azureuser:azureuser /home/azureuser/get_aks_credentials.sh
 
-# AKS 상태 확인 스크립트 생성
-echo "AKS 상태 확인 스크립트 생성 중..."
-cat > /home/azureuser/check_aks_status.sh << 'EOF'
+# 파일 공유 마운트 스크립트 생성
+echo "파일 공유 마운트 스크립트 생성 중..."
+cat > /home/azureuser/mount_env.sh << 'EOF'
 #!/bin/bash
-
-echo "===== AKS 클러스터 상태 확인 ====="
-
-# 노드 상태 확인
-echo -e "\n===== 노드 상태 ====="
-kubectl get nodes -o wide
-
-# 네임스페이스 확인
-echo -e "\n===== 네임스페이스 ====="
-kubectl get namespaces
-
-# 시스템 파드 확인
-echo -e "\n===== 시스템 파드 ====="
-kubectl get pods -n kube-system
-
-# 모든 네임스페이스의 파드 확인
-echo -e "\n===== 모든 파드 ====="
-kubectl get pods --all-namespaces
-
-# 서비스 확인
-echo -e "\n===== 서비스 ====="
-kubectl get services --all-namespaces
-
-# Ingress 확인
-echo -e "\n===== Ingress ====="
-kubectl get ingress --all-namespaces
-
-# 클러스터 정보 확인
-echo -e "\n===== 클러스터 정보 ====="
-kubectl cluster-info
-
-# 리소스 사용량 확인
-echo -e "\n===== 리소스 사용량 ====="
-kubectl top nodes
-kubectl top pods --all-namespaces
+# 스토리지 계정 정보
+export RESOURCE_GROUP="rg-storage"
+export STORAGE_ACCOUNT="sa1sharedstorage"
+export SHARE_NAME="quickscripts"
+export MOUNT_POINT="/home/azureuser/fileshare"
 EOF
 
-chmod +x /home/azureuser/check_aks_status.sh
-chown azureuser:azureuser /home/azureuser/check_aks_status.sh
+chmod +x /home/azureuser/mount_env.sh
+chown azureuser:azureuser /home/azureuser/mount_env.sh
 
-# 애플리케이션 배포 스크립트 생성
-echo "애플리케이션 배포 스크립트 생성 중..."
-cat > /home/azureuser/deploy_app.sh << 'EOF'
+cat > /home/azureuser/mount_fileshare.sh << 'EOF'
 #!/bin/bash
 
-# ACR 정보 가져오기
-SUBSCRIPTION_ID=$(az account show --query id -o tsv)
-HUB_RG=$(az group list --query "[?contains(name, 'hub')].name" -o tsv)
-ACR_NAME=$(az acr list --resource-group $HUB_RG --query "[0].name" -o tsv)
-ACR_LOGIN_SERVER=$(az acr show --name $ACR_NAME --resource-group $HUB_RG --query "loginServer" -o tsv)
+# 환경 변수 설정
+source ./mount_env.sh
 
-echo "ACR 이름: $ACR_NAME"
-echo "ACR 로그인 서버: $ACR_LOGIN_SERVER"
+# 로그 함수 정의
+log() {
+    echo "$(date +"%Y-%m-%d %H:%M:%S") - $1"
+}
 
-# ACR 로그인
-echo "ACR 로그인 중..."
-az acr login --name $ACR_NAME
+log "🚀 Azure File Share 마운트 스크립트 시작"
 
-# 네임스페이스 생성
-echo "네임스페이스 생성 중..."
-kubectl create namespace app
+# 필요한 패키지 설치
+log "📦 필요한 패키지 확인 중..."
+if ! dpkg -l | grep -q cifs-utils; then
+    log "cifs-utils 설치 중..."
+    sudo apt-get update > /dev/null
+    sudo apt-get install cifs-utils -y > /dev/null
+    if [ $? -ne 0 ]; then
+        log "❌ 패키지 설치 실패. 다시 시도하세요."
+        exit 1
+    fi
+fi
+log "✅ 패키지 설치 완료"
 
-# 애플리케이션 배포
-echo "애플리케이션 배포 중..."
-cat > deployment.yaml << EOL
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: demo-app
-  namespace: app
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: demo-app
-  template:
-    metadata:
-      labels:
-        app: demo-app
-    spec:
-      containers:
-      - name: demo-app
-        image: ${ACR_LOGIN_SERVER}/demo-app:latest
-        ports:
-        - containerPort: 80
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
-EOL
+# 환경 변수 설정
+if [ -z "$STORAGE_ACCOUNT" ] || [ -z "$SHARE_NAME" ]; then
+    log "⚠️ 스토리지 계정 또는 공유 이름이 설정되지 않았습니다."
+    
+    # 사용자 입력 요청
+    read -p "스토리지 계정 이름을 입력하세요: " STORAGE_ACCOUNT
+    read -p "파일 공유 이름을 입력하세요: " SHARE_NAME
+    read -p "리소스 그룹 이름을 입력하세요: " RESOURCE_GROUP
+    
+    if [ -z "$STORAGE_ACCOUNT" ] || [ -z "$SHARE_NAME" ] || [ -z "$RESOURCE_GROUP" ]; then
+        log "❌ 필수 정보가 누락되었습니다."
+        exit 1
+    fi
+fi
 
-cat > service.yaml << EOL
-apiVersion: v1
-kind: Service
-metadata:
-  name: demo-app
-  namespace: app
-spec:
-  selector:
-    app: demo-app
-  ports:
-  - port: 80
-    targetPort: 80
-  type: ClusterIP
-EOL
+# 마운트 포인트 설정
+if [ -z "$MOUNT_POINT" ]; then
+    MOUNT_POINT="/home/azureuser/fileshare"
+    log "📂 기본 마운트 포인트를 사용합니다: $MOUNT_POINT"
+fi
 
-cat > ingress.yaml << EOL
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: demo-app
-  namespace: app
-  annotations:
-    kubernetes.io/ingress.class: azure/application-gateway
-spec:
-  rules:
-  - http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: demo-app
-            port:
-              number: 80
-EOL
+# 스토리지 계정 존재 여부 확인
+log "🔍 스토리지 계정 확인 중..."
+STORAGE_EXISTS=$(az storage account show --name $STORAGE_ACCOUNT --resource-group $RESOURCE_GROUP --query "name" -o tsv 2>/dev/null)
+if [ -z "$STORAGE_EXISTS" ]; then
+    log "❌ 스토리지 계정($STORAGE_ACCOUNT)이 존재하지 않습니다."
+    log "💡 사용 가능한 스토리지 계정 목록:"
+    az storage account list --query "[].{Name:name, ResourceGroup:resourceGroup}" -o table
+    
+    # 사용자 입력으로 스토리지 계정 재설정
+    read -p "사용할 스토리지 계정 이름을 입력하세요: " STORAGE_ACCOUNT
+    read -p "스토리지 계정의 리소스 그룹을 입력하세요: " RESOURCE_GROUP
+    
+    if [ -z "$STORAGE_ACCOUNT" ] || [ -z "$RESOURCE_GROUP" ]; then
+        log "❌ 필수 정보가 누락되었습니다."
+        exit 1
+    fi
+fi
 
-kubectl apply -f deployment.yaml
-kubectl apply -f service.yaml
-kubectl apply -f ingress.yaml
+# 스토리지 키 가져오기
+log "🔑 스토리지 계정 키 가져오는 중..."
+STORAGE_KEY=$(az storage account keys list --resource-group $RESOURCE_GROUP --account-name $STORAGE_ACCOUNT --query "[0].value" -o tsv)
 
-echo "애플리케이션 배포 완료!"
-echo "배포 상태 확인 중..."
-kubectl get pods -n app
-kubectl get service -n app
-kubectl get ingress -n app
+if [ -z "$STORAGE_KEY" ]; then
+    log "❌ 스토리지 키를 가져올 수 없습니다. 계정 이름과 리소스 그룹을 확인하세요."
+    exit 1
+fi
+log "✅ 스토리지 키 가져오기 완료"
+
+# 파일 공유 존재 여부 확인
+log "🔍 파일 공유 확인 중..."
+SHARE_EXISTS=$(az storage share exists --account-name $STORAGE_ACCOUNT --account-key $STORAGE_KEY --name $SHARE_NAME --query "exists" -o tsv)
+if [ "$SHARE_EXISTS" != "true" ]; then
+    log "⚠️ 파일 공유($SHARE_NAME)가 존재하지 않습니다. 생성합니다..."
+    az storage share create --account-name $STORAGE_ACCOUNT --account-key $STORAGE_KEY --name $SHARE_NAME
+    if [ $? -ne 0 ]; then
+        log "❌ 파일 공유 생성 실패. 권한을 확인하세요."
+        exit 1
+    fi
+    log "✅ 파일 공유 생성 완료"
+fi
+
+# 마운트 포인트 생성
+log "📁 마운트 포인트 생성 중: $MOUNT_POINT"
+sudo mkdir -p $MOUNT_POINT
+sudo chown azureuser:azureuser $MOUNT_POINT
+
+# 자격 증명 파일 생성
+log "🔐 자격 증명 파일 생성 중..."
+echo "username=$STORAGE_ACCOUNT" | sudo tee /etc/azurefileshare.credentials > /dev/null
+echo "password=$STORAGE_KEY" | sudo tee -a /etc/azurefileshare.credentials > /dev/null
+sudo chmod 600 /etc/azurefileshare.credentials
+log "✅ 자격 증명 파일 생성 완료"
+
+# 기존 마운트 확인 및 해제
+if mount | grep -q "$MOUNT_POINT"; then
+    log "⚠️ 이미 마운트된 파일 공유가 있습니다. 해제 중..."
+    sudo umount $MOUNT_POINT
+fi
+
+# 현재 사용자의 UID와 GID 가져오기
+USER_ID=$(id -u)
+GROUP_ID=$(id -g)
+
+# 파일 공유 마운트
+log "🔄 파일 공유 마운트 중..."
+sudo mount -t cifs "//$STORAGE_ACCOUNT.file.core.windows.net/$SHARE_NAME" "$MOUNT_POINT" -o "vers=3.0,credentials=/etc/azurefileshare.credentials,serverino,nosharesock,actimeo=30,uid=$USER_ID,gid=$GROUP_ID"
+
+if [ $? -ne 0 ]; then
+    log "⚠️ 첫 번째 마운트 시도 실패. SMB 버전을 변경하여 다시 시도합니다..."
+    sudo mount -t cifs "//$STORAGE_ACCOUNT.file.core.windows.net/$SHARE_NAME" "$MOUNT_POINT" -o "vers=2.1,credentials=/etc/azurefileshare.credentials,serverino,nosharesock,actimeo=30,uid=$USER_ID,gid=$GROUP_ID"
+    
+    if [ $? -ne 0 ]; then
+        log "❌ 파일 공유 마운트 실패. 설정을 확인하세요."
+        log "💡 디버그 정보:"
+        log "  - 스토리지 계정: $STORAGE_ACCOUNT"
+        log "  - 파일 공유: $SHARE_NAME"
+        log "  - 마운트 포인트: $MOUNT_POINT"
+        exit 1
+    fi
+fi
+log "✅ 파일 공유 마운트 완료"
+
+# 영구 마운트 설정
+log "📝 영구 마운트 설정 중..."
+if ! grep -q "$MOUNT_POINT" /etc/fstab; then
+    echo "//$STORAGE_ACCOUNT.file.core.windows.net/$SHARE_NAME $MOUNT_POINT cifs nofail,vers=3.0,credentials=/etc/azurefileshare.credentials,serverino,nosharesock,actimeo=30,uid=$USER_ID,gid=$GROUP_ID 0 0" | sudo tee -a /etc/fstab > /dev/null
+    log "✅ /etc/fstab에 마운트 정보 추가 완료"
+else
+    log "⚠️ 이미 /etc/fstab에 마운트 정보가 있습니다."
+fi
+
+# 마운트 확인
+log "🔍 마운트 상태 확인 중..."
+if df -h | grep -q "$MOUNT_POINT"; then
+    MOUNT_INFO=$(df -h | grep "$MOUNT_POINT")
+    log "✅ 파일 공유가 성공적으로 마운트되었습니다:"
+    log "   $MOUNT_INFO"
+    log "📂 마운트 포인트: $MOUNT_POINT"
+else
+    log "❌ 마운트 확인 실패. 수동으로 확인하세요."
+    exit 1
+fi
+
+# 소유권 확인
+log "👤 마운트된 파일 공유의 소유권 확인 중..."
+OWNER_INFO=$(ls -ld $MOUNT_POINT)
+log "   $OWNER_INFO"
+
+# 현재 사용자 정보 출력
+CURRENT_USER=$(whoami)
+log "👤 현재 사용자: $CURRENT_USER (UID: $USER_ID, GID: $GROUP_ID)"
+
+log "🎉 Azure File Share 마운트 스크립트 완료"
 EOF
 
-chmod +x /home/azureuser/deploy_app.sh
-chown azureuser:azureuser /home/azureuser/deploy_app.sh
+chmod +x /home/azureuser/mount_fileshare.sh
+chown azureuser:azureuser /home/azureuser/mount_fileshare.sh
 
 # .bashrc에 유용한 별칭 추가
 echo "유용한 별칭 추가 중..."
@@ -268,294 +384,33 @@ kpf() {
 echo "===== AKS 워크숍 Jumpbox ====="
 echo "다음 스크립트를 사용하여 AKS 클러스터에 접근할 수 있습니다:"
 echo "  - ./get_aks_credentials.sh: AKS 자격 증명 가져오기"
-echo "  - ./check_aks_status.sh: AKS 클러스터 상태 확인"
-echo "  - ./deploy_app.sh: 데모 애플리케이션 배포"
-echo "  - ./aks_check.sh: AKS 클러스터 상세 점검 및 로깅"
+echo "  - ./mount_fileshare.sh: Azure 파일 공유 마운트"
 echo "================================"
 EOF
 
 # 소유권 설정
 chown azureuser:azureuser /home/azureuser/.bashrc
 
-# AKS 점검 스크립트 생성
-echo "AKS 점검 스크립트 생성 중..."
-cat > /home/azureuser/aks_check.sh << 'EOF'
-#!/bin/bash
+# 파일 공유 마운트 자동 실행 (선택적)
+# su - azureuser -c "/home/azureuser/mount_fileshare.sh"
 
-# 스크립트 실행 경로 확인
-export SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+# 설치된 도구 확인 및 요약
+echo "===== 설치된 도구 확인 ====="
+echo "Azure CLI: $(command -v az &> /dev/null && az --version | head -n 1 || echo '설치되지 않음')"
+echo "Docker: $(command -v docker &> /dev/null && docker --version || echo '설치되지 않음')"
+echo "kubectl: $(command -v kubectl &> /dev/null && kubectl version --client || echo '설치되지 않음')"
+echo "Helm: $(command -v helm &> /dev/null && helm version --short || echo '설치되지 않음')"
+echo "kubectx: $(command -v kubectx &> /dev/null && echo '설치됨' || echo '설치되지 않음')"
+echo "kubens: $(command -v kubens &> /dev/null && echo '설치됨' || echo '설치되지 않음')"
+echo "k9s: $(command -v k9s &> /dev/null && k9s version --short || echo '설치되지 않음')"
 
-# 로그 파일 설정
-export LOG_DIR="${SCRIPT_DIR}/logs"
+# Docker 서비스 상태 확인
+echo "Docker 서비스 상태: $(systemctl is-active docker)"
 
-# 로그 디렉토리 변수 확인
-if [ -z "$LOG_DIR" ]; then
-    echo "⚠️ 로그 디렉토리 변수가 비어 있습니다. 기본값으로 './logs'를 사용합니다."
-    export LOG_DIR="./logs"
-fi
+# 사용자 그룹 확인
+echo "azureuser의 그룹: $(groups azureuser | grep -q docker && echo 'docker 그룹에 포함됨' || echo 'docker 그룹에 포함되지 않음')"
 
-# 로그 디렉토리 존재 여부 확인 및 생성
-if [ ! -d "$LOG_DIR" ]; then
-    echo "📁 로그 디렉토리($LOG_DIR)가 존재하지 않습니다. 생성합니다..."
-    mkdir -p "$LOG_DIR"
-    if [ $? -eq 0 ]; then
-        echo "✅ 로그 디렉토리 생성 완료: $LOG_DIR"
-    else
-        echo "❌ 로그 디렉토리 생성 실패! 권한을 확인하세요."
-        # 대체 로그 디렉토리 시도
-        export LOG_DIR="/tmp/aks_check_logs"
-        echo "🔄 대체 로그 디렉토리를 시도합니다: $LOG_DIR"
-        mkdir -p "$LOG_DIR"
-        if [ $? -eq 0 ]; then
-            echo "✅ 대체 로그 디렉토리 생성 완료: $LOG_DIR"
-        else
-            echo "❌ 대체 로그 디렉토리 생성도 실패했습니다. 로그 파일 없이 진행합니다."
-            export LOG_DIR=""
-        fi
-    fi
-else
-    echo "✅ 로그 디렉토리가 이미 존재합니다: $LOG_DIR"
-fi
-
-# 타임스탬프 생성
-export TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-
-# 로그 파일 경로 설정
-if [ -n "$LOG_DIR" ]; then
-    export LOG_FILE="$LOG_DIR/aks_check_$TIMESTAMP.log"
-    echo "📝 로그 파일 경로: $LOG_FILE"
-else
-    export LOG_FILE=""
-    echo "⚠️ 로그 파일을 생성할 수 없습니다. 화면에만 출력합니다."
-fi
-
-# 로그 함수 정의
-log() {
-    echo "$1"
-    if [ -n "$LOG_FILE" ]; then
-        echo "$(date +"%Y-%m-%d %H:%M:%S") - $1" >> "$LOG_FILE"
-    fi
-}
-
-log "🚀 AKS 클러스터 점검 시작"
-if [ -n "$LOG_FILE" ]; then
-    log "(로그 파일: $LOG_FILE)"
-fi
-
-# 환경 변수 파일 경로 설정
-export ENV_FILE="${SCRIPT_DIR}/env/.env"
-
-# 환경 변수 파일 존재 여부 확인
-if [ ! -f "$ENV_FILE" ]; then
-    log "❌ 환경 변수 파일($ENV_FILE)을 찾을 수 없습니다. 파일을 확인하세요."
-    exit 1
-fi
-
-log "📂 환경 변수 파일($ENV_FILE) 발견, 로드 중..."
-
-# 환경 변수 로드
-set -a  # 모든 변수를 export로 설정
-source "$ENV_FILE"
-set +a
-
-# 필수 환경 변수 검증
-export REQUIRED_VARS=("RESOURCE_GROUP" "AKS_CLUSTER" "NAMESPACE")
-export MISSING_VARS=()
-
-for VAR in "${REQUIRED_VARS[@]}"; do
-    if [ -z "${!VAR}" ]; then
-        MISSING_VARS+=("$VAR")
-    fi
-done
-
-if [ ${#MISSING_VARS[@]} -ne 0 ]; then
-    log "❌ 다음 필수 환경 변수가 설정되지 않았습니다:"
-    for VAR in "${MISSING_VARS[@]}"; do
-        log "   - $VAR"
-    done
-    log "환경 변수 파일($ENV_FILE)을 확인하고 필수 변수를 설정하세요."
-    exit 1
-fi
-
-# 환경 변수 정보 출력
-log "✅ 환경 변수 파일 로드 완료"
-log "📌 AKS 클러스터 정보:"
-log "   - 리소스 그룹: $RESOURCE_GROUP"
-log "   - 클러스터 이름: $AKS_CLUSTER"
-log "   - 네임스페이스: $NAMESPACE"
-
-# Azure 인증 정보 출력 (민감 정보는 마스킹)
-if [ -n "$AZURE_TENANT_ID" ]; then
-    log "   - 테넌트 ID: $AZURE_TENANT_ID"
-fi
-
-if [ -n "$AZURE_CLIENT_ID" ]; then
-    log "   - 클라이언트 ID: $AZURE_CLIENT_ID"
-fi
-
-if [ -n "$AZURE_CLIENT_SECRET" ]; then
-    # 클라이언트 시크릿은 보안을 위해 마스킹
-    log "   - 클라이언트 시크릿: ********"
-fi
-
-if [ -n "$AZURE_SUBSCRIPTION_ID" ]; then
-    log "   - 구독 ID: $AZURE_SUBSCRIPTION_ID"
-fi
-
-# Azure 로그인 상태 확인
-log "🔍 Azure 로그인 상태 확인 중..."
-az account show > /dev/null 2>&1
-export LOGIN_STATUS=$?
-
-# 로그인 로직
-if [ $LOGIN_STATUS -ne 0 ]; then
-    log "🔄 Azure 로그인이 필요합니다."
-    if [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZURE_CLIENT_SECRET" ] && [ -n "$AZURE_TENANT_ID" ]; then
-        # Service Principal 로그인
-        log "🔑 Service Principal을 사용하여 로그인 시도 중..."
-        az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID" > /dev/null 2>&1
-        if [ $? -ne 0 ]; then
-            log "❌ Azure 로그인 실패! Service Principal 정보를 확인하세요."
-            exit 1
-        else
-            log "✅ Azure 로그인 성공! (Service Principal)"
-        fi
-    else
-        # 일반 로그인
-        log "🔑 대화형 로그인 시도 중..."
-        if [ -n "$AZURE_TENANT_ID" ]; then
-            az login --tenant "$AZURE_TENANT_ID" > /dev/null 2>&1
-        else
-            az login > /dev/null 2>&1
-        fi
-        
-        if [ $? -ne 0 ]; then
-            log "❌ Azure 로그인 실패!"
-            exit 1
-        else
-            log "✅ Azure 로그인 성공! (대화형)"
-        fi
-    fi
-else
-    log "✅ 이미 Azure에 로그인되어 있습니다."
-    # 현재 로그인된 계정 정보 표시
-    export CURRENT_ACCOUNT=$(az account show --query "[name,user.name]" -o tsv)
-    log "   👤 현재 계정: $CURRENT_ACCOUNT"
-fi
-
-# 구독 설정
-if [ -n "$AZURE_SUBSCRIPTION_ID" ]; then
-    # 현재 구독 확인
-    export CURRENT_SUBSCRIPTION=$(az account show --query "id" -o tsv)
-    
-    if [ "$CURRENT_SUBSCRIPTION" != "$AZURE_SUBSCRIPTION_ID" ]; then
-        log "🔄 구독 변경 중: $AZURE_SUBSCRIPTION_ID"
-        az account set --subscription "$AZURE_SUBSCRIPTION_ID" > /dev/null 2>&1
-        if [ $? -ne 0 ]; then
-            log "❌ 구독 설정 실패! 구독 ID를 확인하세요."
-            exit 1
-        else
-            log "✅ 구독 설정 완료: $AZURE_SUBSCRIPTION_ID"
-        fi
-    else
-        log "✅ 이미 올바른 구독이 설정되어 있습니다: $AZURE_SUBSCRIPTION_ID"
-    fi
-fi
-
-# AKS 클러스터 인증
-az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER" --overwrite-existing --admin > /dev/null 2>&1
-if [ $? -ne 0 ]; then
-    log "❌ AKS 인증 실패! 클러스터 정보를 확인하세요."
-    exit 1
-fi
-
-log "✅ AKS 인증 완료."
-
-# 🔹 1. AKS RBAC 활성화 여부 확인
-log "🔍 AKS RBAC 상태 확인 중..."
-export RBAC_ENABLED=$(az aks show --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER" --query "enableRBAC" -o tsv)
-if [ "$RBAC_ENABLED" == "true" ]; then
-    log "✅ RBAC 활성화됨"
-else
-    log "⚠️ RBAC 비활성화! 보안 강화를 위해 RBAC을 활성화하는 것이 좋습니다."
-fi
-
-# 🔹 2. Azure Monitor 활성화 여부 확인
-log "🔍 Azure Monitor 상태 확인 중..."
-export MONITOR_ENABLED=$(az aks show --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER" --query "addonProfiles.azureMonitorProfile.enabled" -o tsv)
-if [ "$MONITOR_ENABLED" == "true" ]; then
-    log "✅ Azure Monitor 활성화됨"
-else
-    log "⚠️ Azure Monitor 비활성화! 클러스터 모니터링을 위해 활성화 권장."
-fi
-
-# 🔹 3. 컨테이너 모니터링 활성화 여부 및 설정 정보 확인
-log "🔍 컨테이너 모니터링 상태 확인 중..."
-export CONTAINER_MONITORING=$(az aks show --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER" --query "addonProfiles.omsAgent.enabled" -o tsv)
-if [ "$CONTAINER_MONITORING" == "true" ]; then
-    export LOG_WORKSPACE=$(az aks show --resource-group "$RESOURCE_GROUP" --name "$AKS_CLUSTER" --query "addonProfiles.omsAgent.config.logAnalyticsWorkspaceResourceID" -o tsv)
-    log "✅ 컨테이너 모니터링 활성화됨 (Log Analytics Workspace: $LOG_WORKSPACE)"
-else
-    log "⚠️ 컨테이너 모니터링 비활성화! 로그 분석을 위해 활성화 권장."
-fi
-
-# 🔹 4. API 서버 로그 확인 (최근 10개)
-log "🔍 API 서버 로그 조회 중..."
-export API_SERVER_LOGS=$(kubectl logs -n kube-system -l component=kube-apiserver --tail=10 2>&1)
-if [ $? -eq 0 ]; then
-    log "✅ API 서버 로그 (최근 10개):"
-    # API 서버 로그를 한 줄씩 로깅
-    echo "$API_SERVER_LOGS" | while IFS= read -r line; do
-        log "   $line"
-    done
-else
-    log "⚠️ API 서버 로그를 가져올 수 없습니다. 대체 방법: AKS Diagnostics 사용"
-    log "   👉 az aks diagnose --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER"
-fi
-
-# 🔹 5. 어플리케이션 Pod 로그 확인 (최근 10개)
-log "🔍 어플리케이션 Pod 로그 조회 중..."
-export POD_NAME=$(kubectl get pods -n "$NAMESPACE" --no-headers -o custom-columns=":metadata.name" | head -n 1)
-if [ -z "$POD_NAME" ]; then
-    log "⚠️ Pod를 찾을 수 없습니다. 네임스페이스($NAMESPACE)를 확인하세요."
-else
-    export POD_LOGS=$(kubectl logs "$POD_NAME" -n "$NAMESPACE" --tail=10 2>&1)
-    if [ $? -eq 0 ]; then
-        log "✅ Pod ($POD_NAME) 로그 (최근 10개):"
-        # Pod 로그를 한 줄씩 로깅
-        echo "$POD_LOGS" | while IFS= read -r line; do
-            log "   $line"
-        done
-    else
-        log "⚠️ Pod 로그를 가져올 수 없습니다. 대체 방법: Azure Monitor를 사용하여 로그 분석 가능."
-    fi
-fi
-
-log "✅ 모든 점검 완료!"
-if [ -n "$LOG_FILE" ]; then
-    log "📝 로그 파일이 다음 위치에 저장되었습니다: $LOG_FILE"
-fi
-EOF
-
-# env 디렉토리 생성 및 .env 파일 생성
-mkdir -p /home/azureuser/env
-cat > /home/azureuser/env/.env << 'EOF'
-# AKS 클러스터 정보
-RESOURCE_GROUP="your-aks-resource-group"
-AKS_CLUSTER="your-aks-cluster-name"
-NAMESPACE="default"
-
-# Azure 인증 정보 (선택적)
-# AZURE_TENANT_ID="your-tenant-id"
-# AZURE_CLIENT_ID="your-client-id"
-# AZURE_CLIENT_SECRET="your-client-secret"
-# AZURE_SUBSCRIPTION_ID="your-subscription-id"
-EOF
-
-chmod +x /home/azureuser/aks_check.sh
-chown azureuser:azureuser /home/azureuser/aks_check.sh
-chown -R azureuser:azureuser /home/azureuser/env
-
-# 환영 메시지에 aks_check.sh 스크립트 추가
-echo "===== Jumpbox 도구 설치 완료 - $(date) =====" 
+# 설치 완료 메시지
+echo "===== Jumpbox 도구 설치 완료 - $(date) ====="
+echo "주의: Docker 그룹 권한을 적용하려면 VM을 재부팅하거나 사용자가 다시 로그인해야 합니다."
+echo "VM 재부팅 명령어: sudo reboot" 

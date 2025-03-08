@@ -1,0 +1,444 @@
+Hub-Spoke VNet 구조에서 **Hub VNet**에는 Jumpbox VM을, **Spoke VNet**에는 Private AKS를 배포하고, 
+Private Endpoint(DNS 등록 포함)를 설정하여 Jumpbox에서 `nslookup`이 가능하도록 구성하는 Azure CLI 스크립트
+
+---
+
+## **1. 네트워크 및 피어링 설정**
+### **Hub VNet과 Spoke VNet을 생성하고 VNet Peering을 구성**
+```bash
+# 변수 설정
+SUBSCRIPTION_ID=$(az account show --query id --output tsv)
+az account set --subscription $SUBSCRIPTION_ID
+LOCATION="koreacentral"
+
+echo "SUBSCRIPTION_ID: $SUBSCRIPTION_ID" 
+echo "LOCATION: $LOCATION"
+
+# Hub VNet
+HUB_VNET_NAME=Hub_VNET
+FW_SUBNET_NAME=AzureFirewallSubnet
+BASTION_SUBNET_NAME=AzureBastionSubnet
+JUMPBOX_SUBNET_NAME=JumpboxSubnet
+HUB_VNET_PREFIX=10.0.0.0/22 # IP address range of the Virtual network (VNet).
+BASTION_SUBNET_PREFIX=10.0.0.128/26 # IP address range of the Bastion subnet 
+FW_SUBNET_PREFIX=10.0.0.0/26 # IP address range of the Firewall subnet
+JUMPBOX_SUBNET_PREFIX=10.0.0.64/26 # IP address range of the Jumpbox subnet
+
+# Spoke VNet
+SPOKE_VNET_NAME=Spoke_VNET
+ENDPOINTS_SUBNET_NAME=endpoints-subnet
+APPGW_SUBNET_NAME=app-gw-subnet
+AKS_SUBNET_NAME=aks-subnet
+LOADBALANCER_SUBNET_NAME=loadbalancer-subnet
+SPOKE_VNET_PREFIX=10.1.0.0/22 # IP address range of the Virtual network (VNet).
+AKS_SUBNET_PREFIX=10.1.0.0/24 # IP address range of the AKS subnet
+LOADBALANCER_SUBNET_PREFIX=10.1.1.0/28 # IP address range of the Loadbalancer subnet
+APPGW_SUBNET_PREFIX=10.1.2.0/24 # IP address range of the Application Gateway subnet
+ENDPOINTS_SUBNET_PREFIX=10.1.1.16/28 # IP address range of the Endpoints subnet
+
+# Infrastructure
+HUB_RG=rg-hub
+SPOKE_RG=rg-spoke
+LOCATION=koreacentral 
+BASTION_NSG_NAME=Bastion_NSG
+JUMPBOX_NSG_NAME=Jumpbox_NSG
+AKS_NSG_NAME=Aks_NSG
+ENDPOINTS_NSG_NAME=Endpoints_NSG
+LOADBALANCER_NSG_NAME=Loadbalancer_NSG
+APPGW_NSG=Appgw_NSG
+FW_NAME=azure-firewall
+APPGW_NAME=AppGateway
+ROUTE_TABLE_NAME=spoke-rt
+AKS_IDENTITY_NAME=aks-msi
+JUMPBOX_VM_NAME=Jumpbox-VM
+AKS_CLUSTER_NAME=aks-dev
+ACR_NAME="aksacr$RANDOM"
+STUDENT_NAME=ian # don't use spaces
+
+PRIVATE_DNS_LINK_NAME="aksprivatednslink"
+# Private Endpoint 변수는 더 이상 사용하지 않음 (자동 생성된 것을 사용)
+
+# 리소스 그룹 존재 여부 확인 후 생성
+az group show --name $HUB_RG > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "리소스 그룹 $HUB_RG 생성 중..."
+  az group create --name $HUB_RG --location $LOCATION
+else
+  echo "리소스 그룹 $HUB_RG가 이미 존재합니다."
+fi
+
+az group show --name $SPOKE_RG > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "리소스 그룹 $SPOKE_RG 생성 중..."
+  az group create --name $SPOKE_RG --location $LOCATION
+else
+  echo "리소스 그룹 $SPOKE_RG가 이미 존재합니다."
+fi
+
+# Hub VNet 존재 여부 확인 후 생성
+az network vnet show --resource-group $HUB_RG --name $HUB_VNET_NAME > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "Hub VNet 생성 중..."
+  az network vnet create \
+    --resource-group $HUB_RG \
+    --name $HUB_VNET_NAME \
+    --address-prefix $HUB_VNET_PREFIX \
+    --subnet-name $JUMPBOX_SUBNET_NAME \
+    --subnet-prefix $JUMPBOX_SUBNET_PREFIX
+else
+  echo "Hub VNet이 이미 존재합니다."
+fi
+
+# Spoke VNet 존재 여부 확인 후 생성
+az network vnet show --resource-group $SPOKE_RG --name $SPOKE_VNET_NAME > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "Spoke VNet 생성 중..."
+  az network vnet create \
+    --resource-group $SPOKE_RG \
+    --name $SPOKE_VNET_NAME \
+    --address-prefix $SPOKE_VNET_PREFIX \
+    --subnet-name $AKS_SUBNET_NAME \
+    --subnet-prefix $AKS_SUBNET_PREFIX
+else
+  echo "Spoke VNet이 이미 존재합니다."
+fi
+
+# 추가 서브넷 존재 여부 확인 후 생성
+az network vnet subnet show --resource-group $SPOKE_RG --vnet-name $SPOKE_VNET_NAME --name $ENDPOINTS_SUBNET_NAME > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "Endpoints 서브넷 생성 중..."
+  az network vnet subnet create \
+    --resource-group $SPOKE_RG \
+    --vnet-name $SPOKE_VNET_NAME \
+    --name $ENDPOINTS_SUBNET_NAME \
+    --address-prefix $ENDPOINTS_SUBNET_PREFIX
+else
+  echo "Endpoints 서브넷이 이미 존재합니다."
+fi
+
+az network vnet subnet show --resource-group $SPOKE_RG --vnet-name $SPOKE_VNET_NAME --name $LOADBALANCER_SUBNET_NAME > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "LoadBalancer 서브넷 생성 중..."
+  az network vnet subnet create \
+    --resource-group $SPOKE_RG \
+    --vnet-name $SPOKE_VNET_NAME \
+    --name $LOADBALANCER_SUBNET_NAME \
+    --address-prefix $LOADBALANCER_SUBNET_PREFIX
+else
+  echo "LoadBalancer 서브넷이 이미 존재합니다."
+fi
+
+az network vnet subnet show --resource-group $SPOKE_RG --vnet-name $SPOKE_VNET_NAME --name $APPGW_SUBNET_NAME > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "AppGW 서브넷 생성 중..."
+  az network vnet subnet create \
+    --resource-group $SPOKE_RG \
+    --vnet-name $SPOKE_VNET_NAME \
+    --name $APPGW_SUBNET_NAME \
+    --address-prefix $APPGW_SUBNET_PREFIX
+else
+  echo "AppGW 서브넷이 이미 존재합니다."
+fi
+
+# Hub <-> Spoke VNet Peering 존재 여부 확인 후 생성
+az network vnet peering show --resource-group $HUB_RG --name HubToSpoke --vnet-name $HUB_VNET_NAME > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "Hub -> Spoke VNet Peering 생성 중..."
+  az network vnet peering create \
+    --resource-group $HUB_RG \
+    --name HubToSpoke \
+    --vnet-name $HUB_VNET_NAME \
+    --remote-vnet $(az network vnet show -g $SPOKE_RG -n $SPOKE_VNET_NAME --query id -o tsv) \
+    --allow-vnet-access
+else
+  echo "Hub -> Spoke VNet Peering이 이미 존재합니다."
+fi
+
+az network vnet peering show --resource-group $SPOKE_RG --name SpokeToHub --vnet-name $SPOKE_VNET_NAME > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "Spoke -> Hub VNet Peering 생성 중..."
+  az network vnet peering create \
+    --resource-group $SPOKE_RG \
+    --name SpokeToHub \
+    --vnet-name $SPOKE_VNET_NAME \
+    --remote-vnet $(az network vnet show -g $HUB_RG -n $HUB_VNET_NAME --query id -o tsv) \
+    --allow-vnet-access
+else
+  echo "Spoke -> Hub VNet Peering이 이미 존재합니다."
+fi
+```
+
+---
+
+## **2. Jumpbox VM 배포**
+Jumpbox VM을 Hub VNet에 배포하고, Spoke VNet의 Private AKS에 접근할 수 있도록 설정합니다.
+
+```bash
+# Jumpbox 서브넷 ID 가져오기
+JUMPBOX_SUBNET_ID=$(az network vnet subnet show \
+  --resource-group $HUB_RG \
+  --vnet-name $HUB_VNET_NAME \
+  --name $JUMPBOX_SUBNET_NAME \
+  --query id -o tsv)
+
+echo "JUMPBOX_SUBNET_ID: $JUMPBOX_SUBNET_ID"
+
+# Jumpbox VM 존재 여부 확인 후 생성
+az vm show --resource-group $HUB_RG --name $JUMPBOX_VM_NAME > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "Jumpbox VM 생성 중..."
+  az vm create \
+    --resource-group $HUB_RG \
+    --name $JUMPBOX_VM_NAME \
+    --image Ubuntu2204 \
+    --subnet $JUMPBOX_SUBNET_ID \
+    --admin-username azureuser \
+    --generate-ssh-keys
+else
+  echo "Jumpbox VM이 이미 존재합니다."
+fi
+
+# Jumpbox VM의 공용 IP 주소 가져오기
+JUMPBOX_PUBLIC_IP=$(az vm show \
+  --resource-group $HUB_RG \
+  --name $JUMPBOX_VM_NAME \
+  --show-details \
+  --query publicIps -o tsv)
+
+echo "Jumpbox VM Public IP: $JUMPBOX_PUBLIC_IP"
+
+# Jumpbox VM에 필요한 도구 설치 (SSH로 접속 후 실행할 명령어)
+echo "Jumpbox VM에 필요한 도구를 설치하려면 다음 명령어를 실행하세요:"
+echo "ssh azureuser@$JUMPBOX_PUBLIC_IP 'sudo apt-get update && sudo apt-get install -y azure-cli kubectl dnsutils'"
+```
+
+---
+
+## **3. Private AKS 배포**
+Spoke VNet에 **Private Cluster**로 AKS를 배포합니다.
+
+```bash
+# AKS 서브넷 ID 가져오기
+AKS_SUBNET_ID=$(az network vnet subnet show \
+  --resource-group $SPOKE_RG \
+  --vnet-name $SPOKE_VNET_NAME \
+  --name $AKS_SUBNET_NAME \
+  --query id -o tsv)
+
+echo "AKS_SUBNET_ID: $AKS_SUBNET_ID"
+
+# AKS 클러스터 존재 여부 확인 후 생성
+az aks show --resource-group $SPOKE_RG --name $AKS_CLUSTER_NAME > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "Private AKS 클러스터 생성 중..."
+  az aks create \
+    --resource-group $SPOKE_RG \
+    --name $AKS_CLUSTER_NAME \
+    --enable-private-cluster \
+    --vnet-subnet-id $AKS_SUBNET_ID \
+    --generate-ssh-keys \
+    --node-count 1 \
+    --network-plugin azure
+else
+  echo "AKS 클러스터가 이미 존재합니다."
+fi
+
+# AKS 클러스터 정보 확인
+AKS_PRIVATE_FQDN=$(az aks show \
+  --resource-group $SPOKE_RG \
+  --name $AKS_CLUSTER_NAME \
+  --query "privateFqdn" \
+  --output tsv)
+
+echo "AKS Private FQDN: $AKS_PRIVATE_FQDN"
+```
+
+---
+
+## **4. Private Endpoint 및 DNS 설정**
+Jumpbox에서 Private AKS의 Private Endpoint를 DNS로 조회할 수 있도록 설정합니다.
+
+```bash
+# 리전에 맞는 Private DNS Zone 이름 설정
+PRIVATE_DNS_ZONE="privatelink.$LOCATION.azmk8s.io"
+echo "Private DNS Zone: $PRIVATE_DNS_ZONE"
+
+# Private DNS Zone 존재 여부 확인 후 생성
+az network private-dns zone show --resource-group $SPOKE_RG --name $PRIVATE_DNS_ZONE > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "Private DNS Zone 생성 중..."
+  az network private-dns zone create \
+    --resource-group $SPOKE_RG \
+    --name $PRIVATE_DNS_ZONE
+else
+  echo "Private DNS Zone이 이미 존재합니다."
+fi
+
+# Spoke VNet을 Private DNS Zone에 연결 (존재 여부 확인 후)
+az network private-dns link vnet show --resource-group $SPOKE_RG --zone-name $PRIVATE_DNS_ZONE --name "SpokeVnetDNSLink" > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "Spoke VNet을 Private DNS Zone에 연결 중..."
+  az network private-dns link vnet create \
+    --resource-group $SPOKE_RG \
+    --zone-name $PRIVATE_DNS_ZONE \
+    --name "SpokeVnetDNSLink" \
+    --virtual-network $SPOKE_VNET_NAME \
+    --registration-enabled false
+else
+  echo "Spoke VNet DNS 링크가 이미 존재합니다."
+fi
+
+# Hub VNet을 Private DNS Zone에 연결 (존재 여부 확인 후)
+az network private-dns link vnet show --resource-group $SPOKE_RG --zone-name $PRIVATE_DNS_ZONE --name "HubVnetDNSLink" > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "Hub VNet을 Private DNS Zone에 연결 중..."
+  az network private-dns link vnet create \
+    --resource-group $SPOKE_RG \
+    --zone-name $PRIVATE_DNS_ZONE \
+    --name "HubVnetDNSLink" \
+    --virtual-network $(az network vnet show -g $HUB_RG -n $HUB_VNET_NAME --query id -o tsv) \
+    --registration-enabled false
+else
+  echo "Hub VNet DNS 링크가 이미 존재합니다."
+fi
+
+# AKS 자동 생성된 Private Endpoint NIC 찾기
+echo "AKS 자동 생성된 Private Endpoint NIC 찾기..."
+PRIVATE_ENDPOINT_NIC=$(az network nic list \
+  --resource-group $SPOKE_RG \
+  --query "[?contains(name, 'kube-apiserver')].id" \
+  --output tsv)
+
+if [ -z "$PRIVATE_ENDPOINT_NIC" ]; then
+  echo "경고: 자동 생성된 AKS Private Endpoint NIC를 찾을 수 없습니다."
+  exit 1
+fi
+
+echo "Private Endpoint NIC: $PRIVATE_ENDPOINT_NIC"
+
+# Private Endpoint의 Private IP 주소 가져오기
+PRIVATE_IP=$(az network nic show \
+  --ids $PRIVATE_ENDPOINT_NIC \
+  --query "ipConfigurations[0].privateIPAddress" \
+  --output tsv)
+
+echo "Private Endpoint IP: $PRIVATE_IP"
+
+# AKS FQDN에서 호스트 이름 추출
+FULL_PREFIX=$(echo $AKS_PRIVATE_FQDN | cut -d'.' -f1-2)
+echo "AKS Host Prefix: $FULL_PREFIX"
+
+# Private DNS 레코드 존재 여부 확인 후 추가
+az network private-dns record-set a show --resource-group $SPOKE_RG --zone-name $PRIVATE_DNS_ZONE --name "$FULL_PREFIX" > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+  echo "Private DNS A 레코드 생성 중..."
+  az network private-dns record-set a create \
+    --resource-group $SPOKE_RG \
+    --zone-name $PRIVATE_DNS_ZONE \
+    --name "$FULL_PREFIX" \
+    --ttl 3600
+
+  az network private-dns record-set a add-record \
+    --resource-group $SPOKE_RG \
+    --zone-name $PRIVATE_DNS_ZONE \
+    --record-set-name "$FULL_PREFIX" \
+    --ipv4-address $PRIVATE_IP
+else
+  echo "Private DNS A 레코드가 이미 존재합니다."
+  
+  # 기존 레코드의 IP 주소 확인
+  EXISTING_IP=$(az network private-dns record-set a show \
+    --resource-group $SPOKE_RG \
+    --zone-name $PRIVATE_DNS_ZONE \
+    --name "$FULL_PREFIX" \
+    --query "aRecords[0].ipv4Address" \
+    --output tsv)
+  
+  # IP 주소가 다르면 업데이트
+  if [ "$EXISTING_IP" != "$PRIVATE_IP" ]; then
+    echo "Private DNS A 레코드 업데이트 중..."
+    az network private-dns record-set a update \
+      --resource-group $SPOKE_RG \
+      --zone-name $PRIVATE_DNS_ZONE \
+      --name "$FULL_PREFIX" \
+      --set "aRecords[0].ipv4Address=$PRIVATE_IP"
+  fi
+fi
+```
+
+---
+
+## **5. Jumpbox에서 Private AKS 도메인 조회 테스트**
+Jumpbox VM에 SSH로 접속한 후, `nslookup`을 실행하여 Private AKS의 도메인이 조회되는지 확인합니다.
+
+```bash
+# Jumpbox에 SSH 접속
+echo "Jumpbox VM에 SSH로 접속하려면 다음 명령을 실행하세요:"
+echo "ssh azureuser@$JUMPBOX_PUBLIC_IP"
+
+# Jumpbox에서 실행할 명령어 안내
+echo "Jumpbox에 접속한 후 다음 명령어로 AKS Private FQDN을 조회하세요:"
+echo "nslookup $AKS_PRIVATE_FQDN"
+
+# DNS 설정 확인 명령어 안내
+echo "DNS 설정을 확인하려면 다음 명령어를 실행하세요:"
+echo "cat /etc/resolv.conf"
+
+# 클러스터 연결 테스트 안내
+echo "AKS 클러스터에 연결하려면 다음 명령어를 실행하세요:"
+echo "az login"
+echo "az aks get-credentials --resource-group $SPOKE_RG --name $AKS_CLUSTER_NAME --overwrite-existing"
+echo "kubectl get nodes"
+```
+
+---
+
+## **6. 오류 처리 및 문제 해결**
+
+```bash
+# DNS 설정 문제 해결
+echo "DNS 설정에 문제가 있는 경우 Jumpbox에서 다음 명령어를 실행하세요:"
+echo "sudo rm /etc/resolv.conf"
+echo "sudo bash -c 'echo \"nameserver 168.63.129.16\" > /etc/resolv.conf'"
+echo "sudo bash -c 'echo \"search privatelink.$LOCATION.azmk8s.io\" >> /etc/resolv.conf'"
+
+# Private DNS 레코드 확인
+echo "Private DNS 레코드를 확인하려면 다음 명령어를 실행하세요:"
+echo "az network private-dns record-set a list --resource-group $SPOKE_RG --zone-name $PRIVATE_DNS_ZONE --query \"[].{Name:name, Records:aRecords[].ipv4Address, TTL:ttl}\" --output table"
+
+# AKS 자동 생성된 Private Endpoint 확인
+echo "AKS 자동 생성된 Private Endpoint 확인:"
+echo "az network nic list --resource-group $SPOKE_RG --query \"[?contains(name, 'kube-apiserver')].{Name:name, PrivateIP:ipConfigurations[0].privateIPAddress}\" --output table"
+
+# AKS 클러스터 상태 확인
+echo "AKS 클러스터 상태를 확인하려면 다음 명령어를 실행하세요:"
+echo "az aks show --resource-group $SPOKE_RG --name $AKS_CLUSTER_NAME --query provisioningState -o tsv"
+
+# 네트워크 연결 테스트
+echo "네트워크 연결을 테스트하려면 Jumpbox에서 다음 명령어를 실행하세요:"
+echo "ping $PRIVATE_IP"
+```
+
+---
+
+## **7. Terraform 환경과의 통합**
+이 스크립트는 v2 디렉토리의 Terraform 환경과 함께 사용할 수 있습니다. Terraform으로 이미 리소스가 생성된 경우, 이 스크립트는 기존 리소스를 감지하고 중복 생성을 방지합니다.
+
+```bash
+# Terraform 상태 확인
+echo "Terraform 상태를 확인하려면 v2 디렉토리에서 다음 명령어를 실행하세요:"
+echo "cd ../../v2 && terraform state list | grep -E 'aks|private_endpoint|private_dns'"
+
+# Terraform으로 생성된 리소스 가져오기
+echo "Terraform으로 생성된 리소스를 확인하려면 다음 명령어를 실행하세요:"
+echo "cd ../../v2 && terraform output"
+```
+
+---
+
+### **🔹 마무리**
+이제 Jumpbox에서 Private AKS의 Private Endpoint를 DNS를 통해 조회할 수 있습니다.  
+추가적으로 필요하면 Azure Bastion을 통해 Jumpbox에 접근하는 방안을 고려할 수도 있습니다.
+
+### **🔹 다음 단계**
+Private AKS 클러스터의 API 서버에 대한 더 자세한 PrivateLink 설정은 "5_4_PrivateLink for API Server" 문서를 참조하세요.

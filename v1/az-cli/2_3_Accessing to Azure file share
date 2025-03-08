@@ -11,7 +11,7 @@
 
 export STORAGE_RESOURCE_GROUP=rg-shared_storage
 export AZURE_STORAGE_ACCOUNT=sa1sharedstorage
-export STORAGE_FILE_SHARE_NAME=quicksciripts
+export STORAGE_FILE_SHARE_NAME=quickscripts
 export LOCATION=koreacentral
 
 # 파일 리스트 확인

@@ -49,30 +49,32 @@ output "devops_agent_pool_name" {
 }
 
 output "aks_clusters" {
-  description = "배포된 AKS 클러스터 정보"
-  value = {
-    for k, v in module.aks_clusters : k => {
-      name = v.cluster_name
-      id   = v.cluster_id
+  description = "AKS 클러스터 정보"
+  value       = {
+    for k, v in module.aks_cluster : k => {
+      id                 = v.cluster_id
+      name               = v.cluster_name
+      resource_group     = module.resource_groups.spoke_rg_name
+      private_fqdn       = v.private_fqdn
+      kubelet_identity   = v.kubelet_identity
       node_resource_group = v.node_resource_group
-      environment = v.environment
     }
   }
 }
 
 output "aks_cluster_ids" {
-  description = "AKS 클러스터 ID 맵"
-  value       = { for k, v in module.aks_clusters : k => v.cluster_id }
+  description = "AKS 클러스터 ID 목록"
+  value       = { for k, v in module.aks_cluster : k => v.cluster_id }
 }
 
 output "aks_cluster_names" {
-  description = "AKS 클러스터 이름 맵"
-  value       = { for k, v in module.aks_clusters : k => v.cluster_name }
+  description = "AKS 클러스터 이름 목록"
+  value       = { for k, v in module.aks_cluster : k => v.cluster_name }
 }
 
 output "aks_cluster_kubeconfig_commands" {
-  description = "AKS 클러스터 kubeconfig 명령어 맵"
-  value       = { for k, v in module.aks_clusters : k => "az aks get-credentials --resource-group ${module.network.spoke_rg_name} --name ${v.cluster_name}" }
+  description = "AKS 클러스터 kubeconfig 명령어 목록"
+  value       = { for k, v in module.aks_cluster : k => "az aks get-credentials --resource-group ${module.resource_groups.spoke_rg_name} --name ${v.cluster_name}" }
 }
 
 output "keyvault_id" {

@@ -2,7 +2,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~> 3.75"
     }
     azuread = {
       source  = "hashicorp/azuread"
@@ -152,19 +152,19 @@ module "storage" {
   private_dns_zone_name_file = var.private_dns_zone_name_file
   endpoints_subnet_id     = module.network.endpoints_subnet_id
   virtual_network_id      = module.network.storage_vnet_id
-  use_existing_storage    = var.use_existing_storage
-  use_existing_storage_account = var.use_existing_storage_account
-  use_existing_file_share = var.use_existing_file_share
-  use_existing_container  = var.use_existing_container
-  use_existing_private_endpoint = var.use_existing_private_endpoint
-  use_existing_private_dns_zone_blob = var.use_existing_private_dns_zone_blob
-  use_existing_private_dns_zone_file = var.use_existing_private_dns_zone_file
+  use_existing_storage    = false
+  use_existing_storage_account = false
+  use_existing_file_share = false
+  use_existing_container  = false
+  use_existing_private_endpoint_storage = false
+  use_existing_private_dns_zone_blob = false
+  use_existing_private_dns_zone_file = false
   use_existing_resource_group_hub = var.use_existing_resource_group_hub
   use_existing_resource_group_spoke = var.use_existing_resource_group_spoke
   use_existing_resource_group_storage = var.use_existing_resource_group_storage
   # 기존 파일 공유 감지를 위한 변수 추가
-  existing_file_share_names = var.existing_file_share_names
-  existing_storage_account_names = var.existing_storage_account_names
+  existing_file_share_names = []
+  existing_storage_account_names = []
   tags                    = var.tags
 
   depends_on = [
@@ -407,64 +407,6 @@ module "devops_agent" {
   ]
 }
 
-# 10. AKS 클러스터 모듈 (여러 클러스터 지원)
-module "aks_clusters" {
-  source = "./modules/aks"
-  
-  for_each = var.aks_clusters
-  
-  resource_group_name = module.resource_groups.spoke_rg_name
-  location = var.location
-  cluster_name = each.value.name
-  kubernetes_version = each.value.kubernetes_version
-  node_count = each.value.node_count
-  vm_size = each.value.vm_size
-  vnet_id = module.network.spoke_vnet_id
-  subnet_id = module.network.aks_subnet_id
-  acr_id = module.central_acr.acr_id != "" ? module.central_acr.acr_id : null
-  keyvault_id = module.central_keyvault.keyvault_id != "" ? module.central_keyvault.keyvault_id : null
-  appgw_id = module.app_gateway.appgw_id != "" ? module.app_gateway.appgw_id : null
-  log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
-  tenant_id = var.tenant_id
-  admin_group_object_ids = var.keyvault_admin_object_ids
-  
-  # 추가된 설정
-  use_existing_aks = each.value.use_existing_aks
-  use_existing_aks_cluster = var.use_existing_aks_cluster
-  use_existing_aks_node_pool = var.use_existing_aks_node_pool
-  use_existing_aks_identity = var.use_existing_aks_identity
-  use_existing_private_dns_zone = true
-  enable_agic = var.enable_agic
-  enable_monitoring = var.enable_monitoring
-  enable_aks_monitoring = var.enable_aks_monitoring
-  private_cluster_enabled = var.private_cluster_enabled
-  enable_auto_scaling = var.enable_auto_scaling
-  min_count = var.min_count
-  max_count = var.max_count
-  enable_node_public_ip = var.enable_node_public_ip
-  enable_pod_security_policy = var.enable_pod_security_policy
-  enable_rbac = var.enable_rbac
-  network_plugin = var.network_plugin
-  network_policy = var.network_policy
-  load_balancer_sku = var.load_balancer_sku
-  outbound_type = var.outbound_type
-  private_dns_zone_id = var.private_dns_zone_id
-  
-  # Hub VNet ID 추가
-  hub_vnet_id = module.network.hub_vnet_id
-  
-  tags = local.common_tags
-  
-  depends_on = [
-    module.resource_groups,
-    module.network,
-    module.central_acr,
-    module.central_keyvault,
-    module.app_gateway,
-    module.monitoring
-  ]
-}
-
 # 모니터링 모듈
 module "monitoring" {
   source = "./modules/monitoring"
@@ -493,10 +435,10 @@ module "monitoring" {
   vnet_id = module.network.hub_vnet_id
   subscription_id = data.azurerm_subscription.current.subscription_id
   
-  # 추가된 설정
   enable_aks_monitoring = var.enable_aks_monitoring
   enable_app_gateway_monitoring = var.enable_app_gateway_monitoring
   enable_network_monitoring = var.enable_network_monitoring
+  
   alert_scopes = var.alert_scopes
   
   tags = local.common_tags
@@ -506,6 +448,116 @@ module "monitoring" {
     module.network,
     module.app_gateway
   ]
+}
+
+# 10. AKS 관련 모듈 (분리된 모듈 구조)
+
+# 10-1. AKS 사용자 관리 ID 모듈
+module "aks_identity" {
+  source = "./modules/aks_identity"
+  
+  for_each = var.aks_clusters
+  
+  resource_group_name     = module.resource_groups.spoke_rg_name
+  location                = var.location
+  cluster_name            = each.value.name
+  tags                    = local.common_tags
+  
+  use_existing_aks_identity = var.use_existing_aks_identity
+  enable_github_actions_oidc = var.enable_github_actions_oidc != null ? var.enable_github_actions_oidc : false
+  github_repo             = var.github_repo != null ? var.github_repo : ""
+  
+  depends_on = [
+    module.resource_groups,
+    module.network
+  ]
+}
+
+# 10-2. AKS 클러스터 모듈
+module "aks_cluster" {
+  source = "./modules/aks_cluster"
+  
+  for_each = var.aks_clusters
+  
+  resource_group_name     = module.resource_groups.spoke_rg_name
+  location                = var.location
+  cluster_name            = each.value.name
+  kubernetes_version      = each.value.kubernetes_version
+  node_count              = each.value.node_count
+  vm_size                 = each.value.vm_size
+  subnet_id               = module.network.aks_subnet_id
+  enable_auto_scaling     = var.enable_auto_scaling
+  min_count               = var.min_count
+  max_count               = var.max_count
+  enable_node_public_ip   = var.enable_node_public_ip
+  identity_id             = module.aks_identity[each.key].identity_id
+  enable_agic             = var.enable_agic
+  appgw_id                = module.app_gateway.appgw_id
+  admin_group_object_ids  = var.keyvault_admin_object_ids
+  tenant_id               = var.tenant_id
+  enable_github_actions_oidc = var.enable_github_actions_oidc != null ? var.enable_github_actions_oidc : false
+  network_plugin          = var.network_plugin
+  network_policy          = var.network_policy
+  load_balancer_sku       = var.load_balancer_sku
+  outbound_type           = var.outbound_type
+  service_cidr            = var.service_cidr != null ? var.service_cidr : "10.0.0.0/16"
+  dns_service_ip          = var.dns_service_ip != null ? var.dns_service_ip : "10.0.0.10"
+  private_cluster_enabled = var.private_cluster_enabled
+  private_dns_zone_id     = var.private_dns_zone_id
+  enable_rbac             = var.enable_rbac
+  enable_monitoring       = var.enable_monitoring
+  log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
+  tags                    = local.common_tags
+  use_existing_aks_cluster = var.use_existing_aks_cluster
+  
+  depends_on = [module.aks_identity]
+}
+
+# 10-3. AKS DNS 모듈
+module "aks_dns" {
+  source = "./modules/aks_dns"
+  
+  for_each = var.aks_clusters
+  
+  resource_group_name     = module.resource_groups.spoke_rg_name
+  location                = var.location
+  cluster_name            = each.value.name
+  tags                    = local.common_tags
+  
+  use_existing_private_dns_zone = false  # 기존 Private DNS Zone을 사용하지 않음
+  use_existing_private_dns_zone_aks = false  # 기존 AKS Private DNS Zone을 사용하지 않음
+  use_existing_hub_vnet_link = false  # 기존 Hub VNet 링크를 사용하지 않음
+  use_system_dns_zone = false  # 시스템 관리형 DNS Zone을 사용하지 않음
+  skip_dns_record = false  # DNS 레코드 생성
+  static_ip = "10.1.0.4"  # 기본 정적 IP 주소 (api_server_ip가 없을 경우 사용)
+  api_server_ip = ""  # 비워두면 AKS 생성 후 수동으로 업데이트하거나 null_resource를 사용하여 동적으로 조회 가능
+  nic_id_suffix = "b0e62b70-fdab-4994-a1d2-f3cbdbadbbab"  # AKS API 서버 NIC ID의 접미사
+  vnet_id                 = module.network.spoke_vnet_id
+  hub_vnet_id             = module.network.hub_vnet_id
+  private_dns_zone_id     = var.private_dns_zone_id
+  aks_cluster_id          = module.aks_cluster[each.key].cluster_id
+  private_fqdn            = module.aks_cluster[each.key].private_fqdn
+  
+  depends_on = [module.aks_cluster]
+}
+
+# 10-4. AKS RBAC 모듈
+module "aks_rbac" {
+  source = "./modules/aks_rbac"
+  
+  for_each = var.aks_clusters
+  
+  kubelet_identity_id     = module.aks_cluster[each.key].kubelet_identity
+  acr_id                  = module.central_acr.acr_id
+  keyvault_id             = module.central_keyvault.keyvault_id
+  appgw_id                = module.app_gateway.appgw_id
+  agic_identity_id        = module.aks_cluster[each.key].agic_identity_id
+  
+  enable_acr_access       = true
+  enable_keyvault_access  = true
+  enable_agic_access      = var.enable_agic
+  
+  depends_on = [module.aks_cluster]
 }
 
 # 데이터베이스 모듈
@@ -549,7 +601,7 @@ module "app" {
   count  = 0  # 템플릿 파일 오류로 인해 비활성화
   
   resource_group_name = module.resource_groups.spoke_rg_name
-  aks_cluster_name = try(module.aks_clusters["cluster1"].cluster_name, "")
+  aks_cluster_name = try(module.aks_cluster["cluster1"].cluster_name, "")
   acr_login_server = module.central_acr.acr_login_server
   app_name = var.app_name
   app_image_name = var.app_image_name
@@ -571,7 +623,7 @@ module "app" {
   depends_on = [
     module.resource_groups,
     module.network,
-    module.aks_clusters,
+    module.aks_cluster,
     module.central_acr,
     module.central_keyvault,
     module.database,

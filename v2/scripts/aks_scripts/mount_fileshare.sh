@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# 환경 변수 설정
+source ./mount_env.sh
+
 # 로그 함수 정의
 log() {
     echo "$(date +"%Y-%m-%d %H:%M:%S") - $1"
@@ -35,7 +38,8 @@ fi
 
 # 마운트 포인트 설정
 if [ -z "$MOUNT_POINT" ]; then
-    MOUNT_POINT="/mnt/${SHARE_NAME}"
+    # MOUNT_POINT="/mnt/${SHARE_NAME}"
+    MOUNT_POINT="~/fileshare"
     log "📂 기본 마운트 포인트를 사용합니다: $MOUNT_POINT"
 fi
 
@@ -68,7 +72,7 @@ fi
 
 # 파일 공유 마운트
 log "🔄 파일 공유 마운트 중..."
-sudo mount -t cifs //$STORAGE_ACCOUNT.file.core.windows.net/$SHARE_NAME $MOUNT_POINT -o credentials=/etc/azurefileshare.credentials,serverino,nosharesock,actimeo=30
+sudo mount -t cifs //$STORAGE_ACCOUNT.file.core.windows.net/$SHARE_NAME $MOUNT_POINT -o credentials=/etc/azurefileshare.credentials,serverino,nosharesock,actimeo=30,uid=$(id -u),gid=$(id -g)
 
 if [ $? -ne 0 ]; then
     log "❌ 파일 공유 마운트 실패. 설정을 확인하세요."
@@ -79,7 +83,7 @@ log "✅ 파일 공유 마운트 완료"
 # 영구 마운트 설정
 log "📝 영구 마운트 설정 중..."
 if ! grep -q "$MOUNT_POINT" /etc/fstab; then
-    echo "//$STORAGE_ACCOUNT.file.core.windows.net/$SHARE_NAME $MOUNT_POINT cifs nofail,credentials=/etc/azurefileshare.credentials,serverino,nosharesock,actimeo=30 0 0" | sudo tee -a /etc/fstab > /dev/null
+    echo "//$STORAGE_ACCOUNT.file.core.windows.net/$SHARE_NAME $MOUNT_POINT cifs nofail,credentials=/etc/azurefileshare.credentials,serverino,nosharesock,actimeo=30,uid=$(id -u),gid=$(id -g) 0 0" | sudo tee -a /etc/fstab > /dev/null
     log "✅ /etc/fstab에 마운트 정보 추가 완료"
 else
     log "⚠️ 이미 /etc/fstab에 마운트 정보가 있습니다."
@@ -96,5 +100,16 @@ else
     log "❌ 마운트 확인 실패. 수동으로 확인하세요."
     exit 1
 fi
+
+# 소유권 확인
+log "👤 마운트된 파일 공유의 소유권 확인 중..."
+OWNER_INFO=$(ls -ld $MOUNT_POINT)
+log "   $OWNER_INFO"
+
+# 현재 사용자 정보 출력
+CURRENT_USER=$(whoami)
+USER_ID=$(id -u)
+GROUP_ID=$(id -g)
+log "👤 현재 사용자: $CURRENT_USER (UID: $USER_ID, GID: $GROUP_ID)"
 
 log "🎉 Azure File Share 마운트 스크립트 완료" 

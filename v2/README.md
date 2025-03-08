@@ -609,3 +609,152 @@ terraform destroy -auto-approve
 - ACR 이름 충돌이 발생하면 자동으로 고유한 이름을 생성합니다.
 - 특정 모듈만 선택적으로 재배포할 수 있습니다.
 
+# AKS 클러스터 및 Private Link 설정
+
+이 프로젝트는 Azure Kubernetes Service(AKS)와 Private Link를 사용하여 보안이 강화된 쿠버네티스 환경을 구축하는 Terraform 코드를 제공합니다.
+
+## 주요 기능
+
+- Private AKS 클러스터 배포
+- Private DNS Zone 자동 구성
+- Hub-Spoke 네트워크 구조 지원
+- Application Gateway Ingress Controller(AGIC) 통합
+- Azure Container Registry(ACR) 통합
+- Key Vault 통합
+- GitHub Actions OIDC 인증 지원
+
+## 사전 요구 사항
+
+- Terraform v1.0.0 이상
+- Azure CLI
+- Azure 구독
+
+## 사용 방법
+
+### 일반적인 배포 방법
+
+```bash
+# 초기화
+terraform init
+
+# 계획 확인
+terraform plan -var-file=terraform.tfvars
+
+# 배포
+terraform apply -var-file=terraform.tfvars
+```
+
+### 단계적 배포 방법 (의존성 문제 해결)
+
+Terraform에서 count 인수가 적용 단계까지 알 수 없는 값에 의존하는 경우, 다음과 같이 단계적으로 배포할 수 있습니다.
+
+```bash
+# 스크립트 실행 권한 부여
+chmod +x apply-aks.sh  # Linux/Mac
+# 또는
+attrib +x apply-aks.sh  # Windows
+
+# 스크립트 실행
+./apply-aks.sh
+```
+
+이 스크립트는 다음 순서로 리소스를 배포합니다:
+
+1. AKS 클러스터 사용자 관리 ID
+2. AKS 클러스터
+3. Private DNS Zone
+4. AKS VNet에 Private DNS Zone 연결
+5. Hub VNet에 Private DNS Zone 연결
+6. 시스템 관리형 Private DNS Zone에 대한 Hub VNet 연결
+7. AKS API 서버의 Private DNS A 레코드
+8. ACR에 대한 AKS 클러스터 접근 권한
+9. KeyVault에 대한 AKS 클러스터 접근 권한
+10. Application Gateway에 대한 AKS 클러스터 접근 권한
+11. GitHub Actions OIDC 설정
+
+## 모듈 구성
+
+- `aks`: AKS 클러스터 및 관련 리소스
+- `network`: VNet, 서브넷, NSG 등 네트워크 리소스
+- `acr`: Azure Container Registry
+- `keyvault`: Azure Key Vault
+- `appgw`: Application Gateway
+
+## 변수 설정
+
+`terraform.tfvars` 파일에서 다음 변수를 설정할 수 있습니다:
+
+- `cluster_name`: AKS 클러스터 이름
+- `resource_group_name`: 리소스 그룹 이름
+- `location`: 리전
+- `private_cluster_enabled`: Private 클러스터 활성화 여부
+- `private_dns_zone_id`: 기존 Private DNS Zone ID (비워두면 자동 생성)
+- `hub_vnet_id`: Hub VNet ID (Hub-Spoke 구조 사용 시)
+
+## 문제 해결
+
+### count 인수 오류
+
+다음과 같은 오류가 발생하는 경우:
+
+```
+Error: Invalid count argument
+The "count" value depends on resource attributes that cannot be determined until apply...
+```
+
+`apply-aks.sh` 스크립트를 사용하여 단계적으로 배포하세요.
+
+### Private DNS Zone 연결 문제
+
+Private DNS Zone 연결에 문제가 있는 경우:
+
+1. AKS 클러스터가 성공적으로 생성되었는지 확인
+2. Private DNS Zone이 올바르게 생성되었는지 확인
+3. VNet 링크가 올바르게 구성되었는지 확인
+
+```bash
+# DNS Zone 확인
+az network private-dns zone list -g <resource_group> -o table
+
+# VNet 링크 확인
+az network private-dns link vnet list -g <resource_group> -z <dns_zone_name> -o table
+```
+
+# 자동 단계적 적용 기능
+
+이 프로젝트는 Terraform의 `count` 인수 의존성 문제를 자동으로 해결하는 기능을 제공합니다. 이 기능은 다음과 같이 작동합니다:
+
+1. `terraform apply` 명령을 실행하면 Terraform이 리소스를 생성하려고 시도합니다.
+2. 의존성 문제가 발생하면 내장된 스크립트가 자동으로 리소스를 순차적으로 적용합니다.
+3. 이 과정은 사용자 개입 없이 자동으로 진행됩니다.
+
+## 자동 단계적 적용 활성화/비활성화
+
+`terraform.tfvars` 파일에서 다음 변수를 설정하여 자동 단계적 적용 기능을 제어할 수 있습니다:
+
+```hcl
+auto_apply_script = true  # 활성화
+# 또는
+auto_apply_script = false  # 비활성화
+```
+
+기본값은 `true`로 설정되어 있어 의존성 문제가 발생하면 자동으로 해결합니다.
+
+## 작동 방식
+
+자동 단계적 적용 기능은 Terraform의 `null_resource`와 `local-exec` 프로비저너를 사용하여 구현되었습니다. 이 기능은 다음 단계로 리소스를 순차적으로 적용합니다:
+
+1. AKS 클러스터 사용자 관리 ID
+2. AKS 클러스터
+3. Private DNS Zone
+4. AKS VNet에 Private DNS Zone 연결
+5. Hub VNet에 Private DNS Zone 연결
+6. 시스템 관리형 Private DNS Zone에 대한 Hub VNet 연결
+7. AKS API 서버의 Private DNS A 레코드
+8. ACR에 대한 AKS 클러스터 접근 권한
+9. KeyVault에 대한 AKS 클러스터 접근 권한
+10. Application Gateway에 대한 AKS 클러스터 접근 권한
+11. GitHub Actions OIDC 설정
+
+이 기능은 Windows와 Linux/Mac 환경 모두에서 작동합니다.
+

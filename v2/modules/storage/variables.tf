@@ -84,8 +84,8 @@ variable "use_existing_container" {
   default     = false
 }
 
-variable "use_existing_private_endpoint" {
-  description = "Whether to use an existing private endpoint"
+variable "use_existing_private_endpoint_storage" {
+  description = "Whether to use an existing private endpoint for storage"
   type        = bool
   default     = false
 }

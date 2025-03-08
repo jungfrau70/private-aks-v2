@@ -16,7 +16,7 @@ metadata:
   name: aks-admins-cluster-admin
 subjects:
 - kind: Group
-  name: 0c5f0375-80e6-4626-8d4d-3e06de83e968
+  name: 07a53d84-861c-4db0-9d6e-f3ef59e8e017
   apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: ClusterRole
@@ -42,7 +42,7 @@ metadata:
   namespace: development
 subjects:
 - kind: Group
-  name: 7794c6c0-e7fd-49af-ba69-d41594eeef1d
+  name: 25802f22-9f48-4542-ba18-75197b2b3b42
   apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: Role
@@ -66,7 +66,7 @@ metadata:
   name: operators-cluster-reader
 subjects:
 - kind: Group
-  name: f301f9c6-cd63-4821-88c6-6ffa41a4c7c8
+  name: a8cc9006-6b0c-4082-8e38-9a4887ac2fff
   apiGroup: rbac.authorization.k8s.io
 roleRef:
   kind: ClusterRole

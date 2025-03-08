@@ -6,7 +6,7 @@ provisioner: kubernetes.io/azure-file
 parameters:
   storageAccount: sa1sharedstorage
   secretName: azure-storage-secret
-  shareName: quicksciripts
+  shareName: quickscripts
 reclaimPolicy: Retain
 volumeBindingMode: Immediate
 ---
@@ -17,7 +17,7 @@ metadata:
 type: Opaque
 data:
   azurestorageaccountname: c2Exc2hhcmVkc3RvcmFnZQ==
-  azurestorageaccountkey: eklhaDlUWEpzaFFObzNNNFJhR0FEZzFrekpBZnB3UWIxdEJHbE1ON3Nud2RQNDY1cy85OGo2QStMQ3BTSXBKTzREcTh2aXlVNzc1WCtBU3RrT3BSd3c9PQ==
+  azurestorageaccountkey: eEw4RDVEZDhka0ZzOEJUZUc1TW5UaTlzN2lLR1ZsdEFpZ3lVVVMvWTYwaWpncmJLZ1JPOWtoMHZBZ3JXUXNiZUEzY25MYmk0eGJjQStBU3RNb3l1SGc9PQ==
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -32,7 +32,7 @@ spec:
   storageClassName: azurefile
   azureFile:
     secretName: azure-storage-secret
-    shareName: quicksciripts
+    shareName: quickscripts
     readOnly: false
   mountOptions:
     - dir_mode=0777

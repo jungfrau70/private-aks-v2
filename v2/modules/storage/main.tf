@@ -166,7 +166,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "storage_blob_dns_link"
 
 # File 서비스를 위한 Private Endpoint
 resource "azurerm_private_endpoint" "storage_file_endpoint" {
-  count               = var.use_existing_private_endpoint ? 0 : 1
+  count               = var.use_existing_private_endpoint_storage ? 0 : 1
   name                = "${var.storage_account_name}-file-pe"
   location            = local.resource_group_location
   resource_group_name = var.resource_group_name_storage
@@ -188,7 +188,7 @@ resource "azurerm_private_endpoint" "storage_file_endpoint" {
 
 # Blob 서비스를 위한 Private Endpoint
 resource "azurerm_private_endpoint" "storage_blob_endpoint" {
-  count               = var.use_existing_private_endpoint ? 0 : 1
+  count               = var.use_existing_private_endpoint_storage ? 0 : 1
   name                = "${var.storage_account_name}-blob-pe"
   location            = local.resource_group_location
   resource_group_name = var.resource_group_name_storage

@@ -14,8 +14,8 @@ export RESOURCE_GROUP="rg-storage"
 export STORAGE_KEY=$(az storage account keys list --resource-group $RESOURCE_GROUP --account-name $STORAGE_ACCOUNT --query "[0].value" -o tsv)
 
 export SHARE_NAME="quickscripts"
-export MOUNT_POINT="~/clouddrive"
+export MOUNT_POINT="~/quickscripts"
 
-# 파일 공유 마운트
-sudo mkdir -p $MOUNT_POINT
-sudo mount -t cifs //"$STORAGE_ACCOUNT".file.core.windows.net/"$SHARE_NAME" "$MOUNT_POINT" -o vers=3.0,username="$STORAGE_ACCOUNT",password="$STORAGE_KEY",dir_mode=0777,file_mode=0777,serverino,mfsymlinks,cache=none
+# # 파일 공유 마운트
+# sudo mkdir -p $MOUNT_POINT
+# sudo mount -t cifs //"$STORAGE_ACCOUNT".file.core.windows.net/"$SHARE_NAME" "$MOUNT_POINT" -o vers=3.0,username="$STORAGE_ACCOUNT",password="$STORAGE_KEY",dir_mode=0777,file_mode=0777,serverino,mfsymlinks,cache=none

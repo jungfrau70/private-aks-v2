@@ -301,5 +301,3 @@ az role assignment list --assignee <APP_ID> --scope /subscriptions/<SUBSCRIPTION
 - [GitHub Actions 설명서](https://docs.github.com/ko/actions)
 - [Application Gateway Ingress Controller 설명서](https://docs.microsoft.com/ko-kr/azure/application-gateway/ingress-controller-overview) 
 
-
-                terraform apply 오류 (기존 리소스가 발견되면, v2\terraform.tfvars 수정하지 말고 terraform import 하여 terraform 코드 수정하여 해결 필요)

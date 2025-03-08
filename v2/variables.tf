@@ -72,7 +72,7 @@ variable "storage_account_name" {
 variable "file_share_name" {
   description = "파일 공유 이름"
   type        = string
-  default     = "quicksciripts"
+  default     = "quickscripts"
 }
 
 # Hub VNet 설정
@@ -326,43 +326,19 @@ variable "monitor_email_receivers" {
 
 # AKS 클러스터 설정
 variable "aks_clusters" {
-  description = "배포할 AKS 클러스터 목록"
+  description = "AKS 클러스터 구성 맵"
   type = map(object({
-    name                = string
-    kubernetes_version  = string
-    node_count          = number
-    vm_size             = string
-    os_disk_size_gb     = optional(number, 128)
-    max_pods            = optional(number, 110)
-    network_plugin      = optional(string, "azure")
-    network_policy      = optional(string, "azure")
-    load_balancer_sku   = optional(string, "standard")
-    enable_auto_scaling = optional(bool, true)
-    min_count           = optional(number, 1)
-    max_count           = optional(number, 5)
-    availability_zones  = optional(list(string), ["1", "2", "3"])
-    node_labels         = optional(map(string), {})
-    node_taints         = optional(list(string), [])
-    use_existing_aks    = optional(bool, true)
+    name               = string
+    kubernetes_version = string
+    node_count         = number
+    vm_size            = string
   }))
   default = {
-    "cluster1" = {
-      name                = "aks-cluster1"
-      kubernetes_version  = "1.26.6"
-      node_count          = 3
-      vm_size             = "Standard_DS2_v2"
-      os_disk_size_gb     = 128
-      max_pods            = 110
-      network_plugin      = "azure"
-      network_policy      = "azure"
-      load_balancer_sku   = "standard"
-      enable_auto_scaling = true
-      min_count           = 1
-      max_count           = 5
-      availability_zones  = ["1", "2", "3"]
-      node_labels         = { "environment" = "dev" }
-      node_taints         = []
-      use_existing_aks    = true
+    "default" = {
+      name               = "aks-cluster"
+      kubernetes_version = "1.26.0"
+      node_count         = 1
+      vm_size            = "Standard_D2s_v3"
     }
   }
 }
@@ -609,8 +585,8 @@ variable "existing_storage_account_names" {
   default     = []
 }
 
-variable "use_existing_private_endpoint" {
-  description = "기존 Private Endpoint 사용 여부"
+variable "use_existing_private_endpoint_aks" {
+  description = "기존 AKS Private Endpoint 사용 여부"
   type        = bool
   default     = false
 }
@@ -627,14 +603,32 @@ variable "use_existing_hub_vnet" {
   default     = false
 }
 
+variable "use_existing_hub_vnet_link" {
+  description = "기존 Hub VNet 링크 사용 여부"
+  type        = bool
+  default     = false
+}
+
 variable "use_existing_spoke_vnet" {
   description = "기존 Spoke VNet을 사용할지 여부"
   type        = bool
   default     = false
 }
 
+variable "use_existing_spoke_vnet_link" {
+  description = "기존 Spoke VNet 링크 사용 여부"
+  type        = bool
+  default     = false
+}
+
 variable "use_existing_storage_vnet" {
   description = "기존 Storage VNet을 사용할지 여부"
+  type        = bool
+  default     = false
+}
+
+variable "use_existing_storage_vnet_link" {
+  description = "기존 Storage VNet 링크 사용 여부"
   type        = bool
   default     = false
 }
@@ -809,6 +803,12 @@ variable "private_dns_zone_name_postgres" {
   description = "PostgreSQL용 프라이빗 DNS 존 이름"
   type        = string
   default     = "privatelink.postgres.database.azure.com"
+}
+
+variable "private_dns_zone_name_aks" {
+  description = "AKS용 프라이빗 DNS 존 이름"
+  type        = string
+  default     = "privatelink.koreacentral.azmk8s.io"
 }
 
 # 방화벽 설정
@@ -1150,6 +1150,12 @@ variable "use_existing_storage_account" {
   default     = false
 }
 
+variable "use_existing_private_dns_zone_aks" {
+  description = "기존 AKS Private DNS Zone을 사용할지 여부"
+  type        = bool
+  default     = false
+}
+
 variable "use_existing_private_dns_zone_blob" {
   description = "기존 Blob 스토리지용 Private DNS Zone을 사용할지 여부"
   type        = bool
@@ -1267,4 +1273,47 @@ variable "use_existing_keyvault_rbac" {
   description = "KeyVault에 대한 RBAC 권한이 이미 존재하는지 여부"
   type        = bool
   default     = true
+}
+
+variable "use_existing_private_dns_zone" {
+  description = "기존 Private DNS Zone 사용 여부"
+  type        = bool
+  default     = false
+}
+
+variable "use_existing_private_endpoint_storage" {
+  description = "기존 스토리지 Private Endpoint 사용 여부"
+  type        = bool
+  default     = false
+}
+
+variable "auto_apply_script" {
+  description = "의존성 문제 발생 시 자동으로 단계적 적용 스크립트를 실행할지 여부"
+  type        = bool
+  default     = true
+}
+
+# AKS 관련 변수
+variable "enable_github_actions_oidc" {
+  description = "GitHub Actions OIDC를 활성화할지 여부"
+  type        = bool
+  default     = false
+}
+
+variable "github_repo" {
+  description = "GitHub 리포지토리 이름"
+  type        = string
+  default     = ""
+}
+
+variable "service_cidr" {
+  description = "AKS 서비스 CIDR"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "dns_service_ip" {
+  description = "AKS DNS 서비스 IP"
+  type        = string
+  default     = "10.0.0.10"
 }
