@@ -1,0 +1,337 @@
+# Azure 구독 및 테넌트 정보
+subscription_id = "your-subscription-id"
+tenant_id       = "your-tenant-id"
+tenant_domain   = "your-tenant-domain"
+
+# 리소스 위치
+location = "your-location"
+
+# 프로젝트 정보
+prefix = "your-prefix"
+project_name = "your-project-name"
+# environment = "dev"
+
+# 기본 태그 설정
+tags = {
+  owner       = "your-owner"
+  costcenter  = "your-costcenter"
+}
+
+# 관리자 비밀번호 (실제 환경에서는 변경 필요)
+admin_password = "your-admin-password"
+
+# 리소스 그룹 설정
+resource_group_name_hub = "rg-hub"
+resource_group_name_spoke = "rg-spoke"
+resource_group_name_storage = "rg-storage"
+
+# 리소스 존재 여부 설정
+use_existing_resource_group_hub = false
+use_existing_resource_group_spoke = false
+use_existing_resource_group_storage = false
+use_existing_networks = false
+use_existing_hub_vnet = false
+use_existing_hub_vnet_link = false
+use_existing_spoke_vnet = false
+use_existing_spoke_vnet_link = false
+use_existing_storage_vnet = false
+use_existing_storage_vnet_link = false
+use_existing_aks_subnet = false
+use_existing_endpoints_subnet = false
+
+# 스토리지 리소스 존재 여부 설정
+use_existing_storage = false
+use_existing_storage_account = false
+use_existing_file_share = false
+use_existing_container = false
+use_existing_private_endpoint_storage = false
+use_existing_private_dns_zone_blob = false
+use_existing_private_dns_zone_file = false
+
+# AKS Private DNS Zone 및 Private Endpoint 설정
+use_existing_private_dns_zone_aks = false
+use_existing_private_endpoint_aks = false
+
+# ACR 리소스 존재 여부 설정
+use_existing_acr = false
+use_existing_acr_private_endpoint = false
+
+# KeyVault 리소스 존재 여부 설정
+use_existing_keyvault = false
+use_existing_keyvault_private_endpoint = false
+
+# 기타 리소스 존재 여부 설정
+use_existing_log_analytics = false
+use_existing_postgresql = false
+use_existing_ad_groups = true
+use_existing_ad_users = true
+operators_group_id = ""
+admins_group_id = ""
+cluster_admins_group_id = ""
+developers_group_id = ""
+use_existing_bastion = false
+use_existing_jumpbox = false
+use_existing_appgw = false
+
+# 스토리지 계정 설정
+storage_account_name = "sa1sharedstorage"
+file_share_name      = "quickscripts"
+# 기존 파일 공유 감지를 위한 설정
+existing_file_share_names = ["quickscripts"]
+existing_storage_account_names = ["sa1sharedstorage"]
+
+# Hub VNet 설정
+hub_vnet_name        = "hub_vnet"
+hub_vnet_prefix      = "10.0.0.0/22"
+bastion_subnet_name  = "AzureBastionSubnet"
+bastion_subnet_prefix = "10.0.0.128/26"
+# fw_subnet_name       = "azurefirewallsubnet"
+# fw_subnet_prefix     = "10.0.0.0/26"
+jumpbox_subnet_name  = "jumpboxsubnet"
+jumpbox_subnet_prefix = "10.0.0.64/26"
+# acr_subnet_name      = "acr-subnet"
+# acr_subnet_prefix    = "10.0.1.0/26"
+agent_subnet_name    = "agent-subnet"
+agent_subnet_prefix  = "10.0.1.64/26"
+
+# Spoke VNet 설정
+spoke_vnet_name        = "spoke_vnet"
+spoke_vnet_prefix      = "10.1.0.0/22"
+aks_subnet_name        = "aks-subnet"
+aks_subnet_prefix      = "10.1.0.0/24"
+db_subnet_name         = "db-subnet"
+db_subnet_prefix       = "10.1.1.32/28"
+endpoints_subnet_name   = "endpoints-subnet"
+endpoints_subnet_prefix = "10.1.1.16/28"
+# loadbalancer_subnet_name = "loadbalancer-subnet"
+# loadbalancer_subnet_prefix = "10.1.1.0/28"
+appgw_subnet_name       = "app-gw-subnet"
+appgw_subnet_prefix     = "10.1.2.0/24"
+
+# Storage VNet 설정
+storage_vnet_name       = "storage_vnet"
+storage_vnet_prefix     = "10.2.0.0/22"
+# storage_subnet_name     = "storagesubnet"
+# storage_subnet_prefix   = "10.2.0.0/24"
+
+# NSG 이름
+bastion_nsg_name     = "bastion_nsg"
+jumpbox_nsg_name     = "jumpbox_nsg"
+# storage_nsg_name     = "storage_nsg"
+aks_nsg_name         = "aks_nsg"
+endpoints_nsg_name   = "endpoints_nsg"
+# loadbalancer_nsg_name = "loadbalancer_nsg"
+appgw_nsg_name       = "appgw_nsg"
+# acr_nsg_name         = "acr_nsg"
+agent_nsg_name       = "agent_nsg"
+
+# 모니터링 설정
+log_analytics_workspace_name = "law-aks-workshop"
+log_analytics_sku = "PerGB2018"
+log_analytics_retention_days = 30
+monitor_action_group_name = "ag-aks-workshop"
+monitor_email_receivers = [
+  {
+    name = "admin"
+    email_address = "inhwan.jung@jupyteronline.com"
+    use_common_alert_schema = true
+  }
+]
+
+# AKS 클러스터 설정
+aks_clusters = {
+  "cluster1" = {
+    name                = "aks-dev"
+    kubernetes_version  = "1.30.9"
+    node_count          = 3
+    vm_size             = "standard_ds2_v2"
+    vnet_subnet_name    = "aks-subnet-cluster1"
+    vnet_subnet_prefix  = "10.1.5.0/24"
+    environment         = "dev"
+    additional_tags     = { "purpose" = "development" }
+    use_existing_aks    = false
+  },
+  # "cluster2" = {
+  #   name                = "aks-prod"
+  #   kubernetes_version  = "1.30.9"
+  #   node_count          = 3
+  #   vm_size             = "standard_ds2_v2"
+  #   vnet_subnet_name    = "aks-subnet-cluster2"
+  #   vnet_subnet_prefix  = "10.1.6.0/24"
+  #   environment         = "prod"
+  #   additional_tags     = { "purpose" = "production" }
+  #   use_existing_aks    = false
+  # }
+}
+
+# 중앙 ACR 설정
+acr_name = "centralacrc92dai"
+acr_sku = "Premium"
+acr_admin_enabled = false
+
+# 중앙 KeyVault 설정
+keyvault_name = "central-keyvault-unique"
+keyvault_sku = "standard"
+
+# Application Gateway 설정
+appgw_name = "central-appgw"
+appgw_sku = "Standard_v2"
+
+# Bastion 설정
+bastion_name = "central-bastion"
+bastion_sku = "Standard"
+bastion_scale_units = 2
+enable_copy_paste = true
+enable_file_copy = true
+enable_ip_connect = true
+enable_shareable_link = true
+enable_tunneling = true
+
+# Jumpbox 설정
+jumpbox_name = "central-jumpbox"
+jumpbox_vm_size = "standard_ds2_v2"
+jumpbox_admin_username = "azureuser"
+jumpbox_admin_password = "your-jumpbox-admin-password"
+jumpbox_os_disk_size_gb = 128
+jumpbox_os_disk_type = "Premium_LRS"
+enable_public_ip = false
+enable_boot_diagnostics = true
+enable_auto_shutdown = true
+auto_shutdown_time = "2000"
+auto_shutdown_timezone = "korea standard time"
+
+# DevOps Agent 설정
+devops_agent_pool_name = "central-agent-pool"
+devops_agent_vm_size = "standard_ds2_v2"
+devops_agent_admin_username = "azureuser"
+devops_agent_admin_password = "your-devops-agent-admin-password"
+devops_organization_url = "https://dev.azure.com/your-organization"
+devops_pat_token = "your-pat-token"
+use_azure_devops = false
+
+# 데이터베이스 설정
+db_server_name = "pgsql-server"
+db_name = "aks-workshop-db"
+db_admin_username = "pgadmin"
+db_admin_password = "your-db-admin-password"
+db_sku_name = "gp_gen5_2"
+db_storage_mb = 5120
+
+# 애플리케이션 배포 설정
+deploy_applications = false
+
+# 애플리케이션 모듈 설정
+app_name = "aks-workshop-app"
+app_image_name = "aks-workshop-app"
+app_image_tag = "latest"
+app_host = "app.example.com"
+app_replicas = 3
+app_cpu_request = "100m"
+app_memory_request = "128mi"
+app_cpu_limit = "500m"
+app_memory_limit = "512mi"
+app_port = 80
+enable_ingress = true
+ingress_class = "azure/application-gateway"
+enable_tls = false
+tls_secret_name = "app-tls-secret"
+
+# 네트워크 피어링 설정
+enable_hub_spoke_peering = true
+enable_hub_storage_peering = true
+enable_spoke_storage_peering = true
+
+# 프라이빗 엔드포인트 설정
+enable_private_endpoints = true
+private_dns_zone_name_blob = "privatelink.blob.core.windows.net"
+private_dns_zone_name_file = "privatelink.file.core.windows.net"
+private_dns_zone_name_acr = "privatelink.azurecr.io"
+private_dns_zone_name_kv = "privatelink.vaultcore.azure.net"
+private_dns_zone_name_postgres = "privatelink.postgres.database.azure.com"
+private_dns_zone_name_aks = "privatelink.koreacentral.azmk8s.io"
+# 방화벽 설정
+enable_azure_firewall = false
+fw_subnet_name = "azurefirewallsubnet"
+fw_subnet_prefix = "10.0.0.0/26"
+fw_name = "central-firewall"
+fw_policy_name = "central-firewall-policy"
+
+# 로드 밸런서 설정
+enable_internal_lb = false
+loadbalancer_subnet_name = "loadbalancer-subnet"
+loadbalancer_subnet_prefix = "10.1.1.0/28"
+loadbalancer_name = "internal-lb"
+
+# 스토리지 서브넷 설정
+storage_subnet_name = "storagesubnet"
+storage_subnet_prefix = "10.2.0.0/24"
+
+# ACR 서브넷 설정
+acr_subnet_name = "acr-subnet"
+acr_subnet_prefix = "10.0.1.0/26"
+acr_nsg_name = "acr_nsg"
+
+# 스토리지 NSG 설정
+storage_nsg_name = "storage_nsg"
+loadbalancer_nsg_name = "loadbalancer_nsg"
+
+# 추가 스토리지 설정
+container_name = "aks-workshop-container"
+blob_name = "aks-workshop-blob"
+
+# 키볼트 액세스 정책 설정
+enable_keyvault_access_policy = true
+keyvault_admin_object_ids = []
+
+# 모니터링 추가 설정
+enable_aks_monitoring = true
+enable_app_gateway_monitoring = false
+enable_network_monitoring = false
+alert_scopes = []
+
+# AKS 모듈 추가 설정
+enable_agic = true
+enable_monitoring = true
+enable_private_cluster = true
+enable_auto_scaling = false
+min_count = 1
+max_count = 5
+enable_node_public_ip = false
+enable_pod_security_policy = false
+enable_rbac = true
+network_plugin = "azure"
+network_policy = "calico"
+load_balancer_sku = "standard"
+outbound_type = "loadBalancer"
+private_cluster_enabled = true
+private_dns_zone_id = "System"
+
+# 스토리지 모듈 배포 여부
+deploy_storage = true
+
+# AKS 클러스터 관련 세분화된 변수 설정
+use_existing_aks_cluster = false
+use_existing_aks_node_pool = false
+use_existing_aks_identity = false
+
+# 모니터링 리소스 관련 세분화된 변수 설정
+use_existing_log_analytics_solution = false
+use_existing_monitor_action_group = false
+use_existing_monitor_alerts = false
+
+# 애플리케이션 게이트웨이 관련 세분화된 변수 설정
+use_existing_app_gateway = false
+use_existing_app_gateway_public_ip = false
+use_existing_app_gateway_waf_policy = false
+
+# 배스천 및 점프박스 관련 세분화된 변수 설정
+use_existing_bastion_public_ip = false
+use_existing_jumpbox_public_ip = false
+
+# 데이터베이스 관련 세분화된 변수 설정
+use_existing_postgresql_private_endpoint = true
+use_existing_postgresql_private_dns_zone = true
+
+# AKS 모듈 설정
+auto_apply_script = true  # 의존성 문제 발생 시 자동으로 단계적 적용 스크립트 실행
+
