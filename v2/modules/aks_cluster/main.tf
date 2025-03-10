@@ -48,7 +48,6 @@ resource "azurerm_kubernetes_cluster" "aks" {
 
   # Azure AD RBAC 설정
   azure_active_directory_role_based_access_control {
-    managed = true
     azure_rbac_enabled = true
     admin_group_object_ids = length(var.admin_group_object_ids) > 0 ? var.admin_group_object_ids : null
     tenant_id = var.tenant_id

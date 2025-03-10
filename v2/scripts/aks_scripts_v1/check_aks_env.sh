@@ -15,6 +15,7 @@ HUB_VNET_NAME="hub_vnet"
 SPOKE_VNET_NAME="spoke_vnet"
 STORAGE_VNET_NAME="storage_vnet"
 LOG_FILE="check_aks_result_$(date +%Y%m%d_%H%M%S).log"
+NAMESPACES='default,kube-system'
 
 # 환경 변수 설정
 export RESOURCE_GROUP_HUB=$RESOURCE_GROUP_HUB
@@ -31,6 +32,7 @@ export HUB_VNET_NAME=$HUB_VNET_NAME
 export SPOKE_VNET_NAME=$SPOKE_VNET_NAME
 export STORAGE_VNET_NAME=$STORAGE_VNET_NAME
 export LOG_FILE=$LOG_FILE
+export NAMESPACES=$NAMESPACES
 
 # 스크립트 실행 경로 확인
 export SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
