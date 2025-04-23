@@ -1,0 +1,30 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# 개요
+## 목적: IT 운영조직에서 aks trouble-shooting 또는 aks healthcheck
+## 유지보수가 용이하게 구성하면 좋겠음.
+## 또한 환경설정이 비교적 간단하였으면 좋겠음.
+
+# 운영조직내 독립된 3개 조직에서 각각 사용하며, 기능은 겹칠 수 있음.
+  아래 구조로 파일을 재구성할때, v2\scripts\check_aks_scripts 디렉토리 내 파일을 기본으로 사용하였으면 함.
+
+## 긴급점검 스크립트 (24x7) for 1st level technical support (simple monitoring)
+  . 결과파일 및 해석(24x7_aks*.log)
+  . 체크리스트(24x7_aks_checklist)
+  . 체크스크립트(24x7_aks_check.sh)
+  . 체크스크립트(24x7_aks_check.env)
+
+## 긴급점검 스크립트 (aks_platform) for 2nd level technical support (aks platform trouble-shooting and healthcheck)
+  . 결과파일 및 해석(aks_*.log)
+  . 체크리스트(aks_checklist)
+  . 체크스크립트(aks_check.sh)
+  . 체크스크립트(aks_check.env)
+
+## 긴급점검 스크립트 (aks_pod_check) for 2nd level technical support (aks pod[=application] trouble-shooting and healthcheck)
+  . 결과파일 및 해석(aks_pod_*.log)
+  . 체크리스트(aks_pod_checklist)
+  . 체크스크립트(aks_pod.sh)
+  . 체크스크립트(aks_pod.env)
