@@ -232,13 +232,37 @@ log "✅ Script completed. Results logged to $LOGFILE"
 3. 실행: `chmod +x connectivity_diagnostic.sh && ./connectivity_diagnostic.sh`
 4. 결과 확인: `cat connectivity_test.log`
 
----
 
 필요 시 아래 항목 추가도 가능합니다:
 
 * DNS 확인
 * curl을 이용한 HTTPS 연결 검증
 * Istio/CNI/Calico 네트워크 정책 확인 등
+* SNAT 포트 소진 진단 (Azure NAT Gateway/Load Balancer SNAT 상태, Log Analytics 쿼리)
+* DB 서버 로그 확인 (연결 종료, idle timeout 등)
+* DB 커넥션 풀/timeout 설정 점검
+* 네트워크 패킷 캡처 및 분석 (Pod/노드/DB 서버)
+* Azure NSG Flow Log, Connection Monitor 활용
+
+---
+
+### 🧭 Troubleshooting Flow (권장 진단 순서)
+
+1. **문제 재현**: Pod에서 DB로 반복 연결 테스트(`start_session_watch`)로 끊김/timeout 발생 시점 기록
+2. **네트워크 경로/정책 점검**: NSG/UDR, Outbound 방식, 네트워크 정책(CNI/Calico 등) 확인
+3. **SNAT 포트 소진 여부**: NAT Gateway/Load Balancer SNAT 상태, Log Analytics 쿼리(`AzureDiagnostics | where ResourceType == "NATGatewayPublicIP" ...` 등)
+4. **패킷 캡처**: Pod/노드/DB 서버에서 동시 패킷 캡처, Wireshark로 RST/FIN/Timeout/손실 등 분석
+5. **DB/Pod 로그 분석**: 연결 종료 원인, 에러 메시지 등 확인
+6. **DNS 이슈**: `nslookup`, `dig`, `/etc/resolv.conf` 등으로 DNS latency/실패 점검
+7. **DB 커넥션 풀/timeout**: 앱/Pod의 커넥션 풀, keepalive, idle timeout 등 설정 확인
+8. **Azure 모니터링**: Log Analytics, NSG Flow Log, Connection Monitor 등 활용
+9. **문제 원인별 해결책**
+    - NSG/UDR 차단: 룰 수정
+    - SNAT exhaustion: NAT Gateway 확장/분리, Outbound IP 추가
+    - DB idle timeout: DB/앱 커넥션 풀 설정 조정
+    - 네트워크 품질: Azure 지원팀에 패킷/로그 첨부하여 문의
+
+---
 
 도움이 더 필요하시면 말씀해 주세요.
 
