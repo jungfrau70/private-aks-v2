@@ -14,7 +14,7 @@ CONTAINER_NAME="tfstate"
 
 # 리소스 그룹 생성
 echo "리소스 그룹 생성 중..."
-az group create --name $RESOURCE_GROUP_NAME --location $LOCATION
+az group create --name $RESOURCE_GROUP_NAME --location $LOCATION --subscription $SUBSCRIPTION_ID
 
 # 스토리지 계정 생성
 echo "스토리지 계정 생성 중..."
@@ -22,18 +22,21 @@ az storage account create \
   --resource-group $RESOURCE_GROUP_NAME \
   --name $STORAGE_ACCOUNT_NAME \
   --sku Standard_LRS \
-  --encryption-services blob
+  --encryption-services blob \
+  --subscription $SUBSCRIPTION_ID
 
 # 컨테이너 생성
 echo "스토리지 컨테이너 생성 중..."
 az storage container create \
   --name $CONTAINER_NAME \
-  --account-name $STORAGE_ACCOUNT_NAME
+  --account-name $STORAGE_ACCOUNT_NAME \
+  --subscription $SUBSCRIPTION_ID
 
 # 스토리지 계정 키 가져오기
 ACCOUNT_KEY=$(az storage account keys list \
   --resource-group $RESOURCE_GROUP_NAME \
   --account-name $STORAGE_ACCOUNT_NAME \
+  --subscription $SUBSCRIPTION_ID \
   --query "[0].value" -o tsv)
 
 # backend.conf 파일 생성

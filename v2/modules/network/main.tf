@@ -415,20 +415,33 @@ resource "azurerm_subnet" "aks_subnet" {
   ]
 }
 
-# DB 서브넷 생성
+# DB 서브넷 생성 - Hub VNet에 배치
 resource "azurerm_subnet" "db_subnet" {
-  count                = var.use_existing_spoke_vnet ? 0 : 1
+  count                = var.use_existing_hub_vnet ? 0 : 1
   name                 = var.db_subnet_name
-  resource_group_name  = local.spoke_rg_name
-  virtual_network_name = local.spoke_vnet_name
+  resource_group_name  = local.hub_rg_name
+  virtual_network_name = local.hub_vnet_name
   address_prefixes     = [var.db_subnet_prefix]
   
   # 서비스 엔드포인트 추가
   service_endpoints    = ["Microsoft.Sql"]
-  
+
+  # PostgreSQL Flexible Server를 위한 서브넷 위임 추가
+  delegation {
+    name = "fs"
+    service_delegation {
+      name    = "Microsoft.DBforPostgreSQL/flexibleServers"
+      actions = [
+        "Microsoft.Network/virtualNetworks/subnets/join/action",
+        "Microsoft.Network/virtualNetworks/subnets/prepareNetworkPolicies/action",
+        "Microsoft.Network/virtualNetworks/subnets/unprepareNetworkPolicies/action"
+      ]
+    }
+  }
+
   # 프라이빗 엔드포인트 네트워크 정책 비활성화
   # private_endpoint_network_policies_enabled = false
-  
+
   depends_on = [
     azurerm_virtual_network.spoke_vnet
   ]

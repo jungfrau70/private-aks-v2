@@ -1,5 +1,17 @@
 #!/bin/bash
 
+# var.subscription_id
+#   Azure 구독 ID
+#   Enter a value: b6f97aed-4542-491f-a94c-e0f05563485c
+
+# var.tenant_domain
+#   Azure AD 테넌트 도메인
+#   Enter a value: jupyteronlinegmail.onmicrosoft.com
+
+# var.tenant_id
+#   Azure 테넌트 ID
+#   Enter a value: b0a8bb4b-d934-4714-a4e1-213e1a3c31f5
+
 # 로그 디렉토리 생성
 LOG_DIR="terraform_logs"
 mkdir -p $LOG_DIR

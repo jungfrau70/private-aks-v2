@@ -1,0 +1,120 @@
+
+azureuser@central-jumpbox:~$ ./2.sh 
+📌 대상 Pod: network-multitool
+📌 대상 DB: pgsql-hub-server-20250722-01.postgres.database.azure.com:5432
+
+✅ [1] 외부 IP 확인
+20.249.163.224
+✅ [2] DNS 확인
+Server:10.0.0.10
+Address:10.0.0.10#53
+
+Non-authoritative answer:
+pgsql-hub-server-20250722-01.postgres.database.azure.comcanonical name = fd0464a7e31f.privatelink.postgres.database.azure.com.
+Name:fd0464a7e31f.privatelink.postgres.database.azure.com
+Address: 10.0.5.4
+
+
+✅ [3] 포트 연결 테스트
+pgsql-hub-server-20250722-01.postgres.database.azure.com (10.0.5.4:5432) open
+
+✅ [4] tracepath (경로 추적)
+ 1?: [LOCALHOST]                      pmtu 1500
+ 1:  10-1-0-5.calico-typha.calico-system.svc.cluster.local   1.245ms 
+ 1:  10-1-0-5.calico-typha.calico-system.svc.cluster.local   0.257ms 
+ 2:  no reply
+ 3:  10.0.5.4                                              1.310ms reached
+     Resume: pmtu 1500 hops 3 back 3 
+
+✅ [5] 반복 연결 확인 (5회)
+pgsql-hub-server-20250722-01.postgres.database.azure.com (10.0.5.4:5432) open
+pgsql-hub-server-20250722-01.postgres.database.azure.com (10.0.5.4:5432) open
+pgsql-hub-server-20250722-01.postgres.database.azure.com (10.0.5.4:5432) open
+pgsql-hub-server-20250722-01.postgres.database.azure.com (10.0.5.4:5432) open
+pgsql-hub-server-20250722-01.postgres.database.azure.com (10.0.5.4:5432) open
+azureuser@central-jumpbox:~$ ^C
+azureuser@central-jumpbox:~$ ./1.sh 
+
+🔐 Azure 로그인 상태:
+EnvironmentName    HomeTenantId                          IsDefault    Name           State    TenantId
+-----------------  ------------------------------------  -----------  -------------  -------  ------------------------------------
+AzureCloud         b0a8bb4b-d934-4714-a4e1-213e1a3c31f5  True         Wa Investment  Enabled  b0a8bb4b-d934-4714-a4e1-213e1a3c31f5
+
+📦 AKS 클러스터 정보:
+Name         Location
+-----------  ------------
+aks-cluster  koreacentral
+
+📂 노드 리소스 그룹: MC_rg-spoke_aks-cluster_koreacentral
+
+🌐 VNet 이름: 
+
+📤 Outbound 구성 방식:
+loadBalancer
+
+🔍 LB 또는 NAT Gateway:
+Name                                  IP              AllocationMethod
+------------------------------------  --------------  ------------------
+4df69522-1218-4488-8083-31f36cbd2f61  20.249.163.224  Static
+
+🔐 NSG 목록:
+Name                        Location
+--------------------------  ------------
+aks-agentpool-11466683-nsg  koreacentral
+
+📜 User Defined Routes:
+[]
+
+🌍 multitool Pod의 Public IP 확인:
+error: error executing jsonpath "{.items[0].metadata.name}": Error executing template: array index out of bounds: index 0, length 0. Printing more information for debugging the temp
+late:
+template was:
+{.items[0].metadata.name}
+object given to jsonpath engine was:
+map[string]interface {}{"apiVersion":"v1", "items":[]interface {}{}, "kind":"List", "metadata":map[string]interface {}{"resourceVersion":""}}
+
+
+error: pod, type/name or --filename must be specified
+❌ 실패
+2025-07-22 08:40:31 | 🚧 Starting AKS to DB connectivity diagnostic script...
+2025-07-22 08:40:31 | 🔎 Checking AKS VNet and Outbound Type...
+OutboundType
+--------------
+loadBalancer
+2025-07-22 08:40:32 | 🌐 Listing Azure Public IPs...
+Ip              Name
+--------------  ------------------------------------
+20.249.163.224  4df69522-1218-4488-8083-31f36cbd2f61
+4.217.179.166   central-bastion-pip
+4.217.185.228   central-appgw-pip
+2025-07-22 08:40:34 | 🛡  Listing NSG and UDR configurations...
+Name
+----------------
+Aks_NSG
+Appgw_NSG
+Endpoints_NSG
+Loadbalancer_NSG
+
+2025-07-22 08:40:37 | 🚀 Deploying network-multitool pod...
+pod/network-test unchanged
+2025-07-22 08:40:43 | 📡 Getting Pod external IP...
+pod/network-test condition met
+2025-07-22 08:40:43 | External IP of Pod: 20.249.163.224
+2025-07-22 08:40:43 | 🔁 Traceroute to pgsql-hub-server-20250722-01.postgres.database.azure.com...
+traceroute to pgsql-hub-server-20250722-01.postgres.database.azure.com (10.0.5.4), 30 hops max, 46 byte packets
+ 1  10-1-0-5.calico-typha.calico-system.svc.cluster.local (10.1.0.5)  0.010 ms  0.009 ms  0.008 ms
+ 2  *  *  *
+ 3  10.0.5.4 (10.0.5.4)  1.182 ms  0.943 ms  0.494 ms
+2025-07-22 08:40:59 | 🔌 TCP connection test to pgsql-hub-server-20250722-01.postgres.database.azure.com:5432
+✅ Connected
+2025-07-22 08:40:59 | 🔌 TCP connection test to pgsql-hub-server-20250722-01.postgres.database.azure.com:1521
+bash: connect: Connection refused
+bash: line 1: /dev/tcp/pgsql-hub-server-20250722-01.postgres.database.azure.com/1521: Connection refused
+❌ Failed
+2025-07-22 08:40:59 | 🐘 Testing PostgreSQL Connection...
+bash: line 1: psql: command not found
+command terminated with exit code 127
+2025-07-22 08:40:59 | 🏛  Testing Oracle Connection...
+bash: line 1: sqlplus: command not found
+command terminated with exit code 127
+2025-07-22 08:41:00 | 📊 Starting session stability test for 600 seconds...

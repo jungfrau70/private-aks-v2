@@ -158,7 +158,7 @@ variable "db_subnet_name" {
 variable "db_subnet_prefix" {
   description = "데이터베이스 서브넷 주소 공간"
   type        = string
-  default     = "10.1.1.32/28"
+  default     = "10.0.5.0/24"
 }
 
 variable "endpoints_subnet_name" {

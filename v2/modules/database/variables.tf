@@ -1,3 +1,7 @@
+variable "private_dns_zone_id" {
+  description = "The resource ID of the existing Private DNS Zone for PostgreSQL Flexible Server."
+  type        = string
+}
 variable "resource_group_name" {
   type        = string
   description = "리소스 그룹 이름"
@@ -71,6 +75,7 @@ variable "subnet_prefix" {
 variable "postgresql_server_name" {
   description = "PostgreSQL 서버 이름"
   type        = string
+  default     = "pgsql-hub-server-2"
 }
 
 variable "backup_retention_days" {

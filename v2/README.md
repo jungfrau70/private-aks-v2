@@ -36,6 +36,14 @@ chmod +x deploy.sh
 ./deploy.sh
 ```
 
+Name             ResourceGroup
+---------------  ------------------
+tfstate6f5f60d2  rg-terraform-state
+
+------------------
+2025-07-22T02:47:24.471107+00:00  key1       FULL           gg5jnXCW8UsMEIS5/eSfhaHyJ7vHVZUGh9pEzWQ06E+VvJZQ490uieyfLeIOPU+He6zT9PDMnZrk+AStDVN75g==
+2025-07-22T02:47:24.471107+00:00  key2       FULL           N62+Etep7SZYWg65aahf8Wla+jWKKy5ygTKuYUhSPtycXeLILt46X/vhPx5xtJHalyfMvOzR6OWr+AStUMr1cg==
+
 ### 3. 배포 과정
 
 배포 스크립트는 다음 단계로 진행됩니다:
